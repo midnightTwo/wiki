@@ -1,0 +1,212 @@
+# Mailu Mail Server для komarnitsky.wiki
+# Документация: https://mailu.io/2024.06/
+
+version: "3.8"
+
+services:
+  # ==========================================
+  # Reverse Proxy (Nginx) — точка входа
+  # ==========================================
+  front:
+    image: ghcr.io/mailu/nginx:2024.06
+    restart: always
+    env_file: mailu.env
+    logging:
+      driver: journald
+      options:
+        tag: mailu-front
+    ports:
+      - "80:80"       # HTTP (+ Let's Encrypt)
+      - "443:443"     # HTTPS (Webmail + Admin)
+      - "25:25"       # SMTP (приём почты)
+      - "465:465"     # SMTPS
+      - "587:587"     # SMTP Submission
+      - "993:993"     # IMAPS
+      - "995:995"     # POP3S (если нужен)
+    volumes:
+      - "/mailu/certs:/certs"
+      - "/mailu/overrides/nginx:/overrides:ro"
+    depends_on:
+      - resolver
+    dns:
+      - 192.168.203.254
+    networks:
+      default:
+        ipv4_address: 192.168.203.1
+
+  # ==========================================
+  # DNS Resolver (внутренний)
+  # ==========================================
+  resolver:
+    image: ghcr.io/mailu/unbound:2024.06
+    env_file: mailu.env
+    restart: always
+    networks:
+      default:
+        ipv4_address: 192.168.203.254
+
+  # ==========================================
+  # Админка — управление почтовыми ящиками
+  # ==========================================
+  admin:
+    image: ghcr.io/mailu/admin:2024.06
+    restart: always
+    env_file: mailu.env
+    logging:
+      driver: journald
+      options:
+        tag: mailu-admin
+    volumes:
+      - "/mailu/data:/data"
+      - "/mailu/dkim:/dkim"
+    depends_on:
+      - redis
+      - resolver
+    dns:
+      - 192.168.203.254
+    networks:
+      default:
+        ipv4_address: 192.168.203.2
+
+  # ==========================================
+  # IMAP сервер (Dovecot) — хранение и доступ к почте
+  # ==========================================
+  imap:
+    image: ghcr.io/mailu/dovecot:2024.06
+    restart: always
+    env_file: mailu.env
+    logging:
+      driver: journald
+      options:
+        tag: mailu-imap
+    volumes:
+      - "/mailu/mail:/mail"
+      - "/mailu/overrides/dovecot:/overrides:ro"
+    depends_on:
+      - front
+      - resolver
+    dns:
+      - 192.168.203.254
+    networks:
+      default:
+        ipv4_address: 192.168.203.3
+
+  # ==========================================
+  # SMTP сервер (Postfix) — отправка и приём писем
+  # ==========================================
+  smtp:
+    image: ghcr.io/mailu/postfix:2024.06
+    restart: always
+    env_file: mailu.env
+    logging:
+      driver: journald
+      options:
+        tag: mailu-smtp
+    volumes:
+      - "/mailu/mailqueue:/queue"
+      - "/mailu/overrides/postfix:/overrides:ro"
+    depends_on:
+      - front
+      - resolver
+    dns:
+      - 192.168.203.254
+    networks:
+      default:
+        ipv4_address: 192.168.203.4
+
+  # ==========================================
+  # Антиспам (Rspamd)
+  # ==========================================
+  antispam:
+    image: ghcr.io/mailu/rspamd:2024.06
+    restart: always
+    env_file: mailu.env
+    logging:
+      driver: journald
+      options:
+        tag: mailu-antispam
+    volumes:
+      - "/mailu/filter:/var/lib/rspamd"
+      - "/mailu/overrides/rspamd:/overrides:ro"
+    depends_on:
+      - front
+      - resolver
+    dns:
+      - 192.168.203.254
+    networks:
+      default:
+        ipv4_address: 192.168.203.5
+
+  # ==========================================
+  # Webmail (Roundcube) — веб-интерфейс для пользователей
+  # ==========================================
+  webmail:
+    image: ghcr.io/mailu/webmail:2024.06
+    restart: always
+    env_file: mailu.env
+    logging:
+      driver: journald
+      options:
+        tag: mailu-webmail
+    volumes:
+      - "/mailu/webmail:/data"
+      - "/mailu/overrides/roundcube:/overrides:ro"
+    depends_on:
+      - front
+      - resolver
+    dns:
+      - 192.168.203.254
+    networks:
+      default:
+        ipv4_address: 192.168.203.6
+
+  # ==========================================
+  # Redis — кэш и очереди
+  # ==========================================
+  redis:
+    image: redis:7-alpine
+    restart: always
+    volumes:
+      - "/mailu/redis:/data"
+    depends_on:
+      - resolver
+    dns:
+      - 192.168.203.254
+    networks:
+      default:
+        ipv4_address: 192.168.203.7
+
+  # ==========================================
+  # Komarnitsky Panel — красивая админка
+  # ==========================================
+  panel:
+    build: .
+    restart: always
+    environment:
+      - MAIL_DOMAIN=komarnitsky.wiki
+      - DB_PATH=/data/komarnitsky-mail.db
+      - SECRET_KEY=${SECRET_KEY}
+    volumes:
+      - "/mailu/panel-data:/data"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - admin
+      - resolver
+    dns:
+      - 192.168.203.254
+    networks:
+      default:
+        ipv4_address: 192.168.203.10
+
+# ==========================================
+# Сеть
+# ==========================================
+networks:
+  default:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 192.168.203.0/24

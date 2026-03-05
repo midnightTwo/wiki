@@ -1,0 +1,28 @@
+# Dependencies
+frontend/node_modules/
+
+# Python
+webapp/__pycache__/
+webapp/*.db
+*.pyc
+*.pyo
+
+# Environment
+.env
+*.log
+
+# Docker
+mailu/data/
+mailu/dkim/
+mailu/mail/
+mailu/overrides/
+mailu/certs/
+mailu/redis/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

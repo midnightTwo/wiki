@@ -659,7 +659,7 @@ export default function Dashboard() {
           </div>
           <div className="form-group">
             <label className="form-label">Куда (получатель)</label>
-            <input type="email" className="form-input" placeholder="user@komarnitsky.wiki" required
+            <input type="email" className="form-input" placeholder="user@kmr-mail.online" required
               value={newAlias.destination} onChange={e => setNewAlias({ ...newAlias, destination: e.target.value })} />
           </div>
           <div className="modal-actions">

@@ -5,7 +5,7 @@ import Dashboard from './pages/Dashboard'
 import Settings from './pages/Settings'
 
 export const AuthContext = createContext()
-export const DOMAIN = 'komarnitsky.wiki'
+export const DOMAIN = 'kmr-mail.online'
 
 export default function App() {
   const [isAuth, setIsAuth] = useState(false)

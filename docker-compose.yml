@@ -1,4 +1,4 @@
-# Mailu Mail Server для komarnitsky.wiki
+# Mailu Mail Server для kmr-mail.online
 # Документация: https://mailu.io/2024.06/
 
 version: "3.8"
@@ -184,7 +184,7 @@ services:
     restart: always
     env_file: mailu.env
     environment:
-      - MAIL_DOMAIN=komarnitsky.wiki
+      - MAIL_DOMAIN=kmr-mail.online
       - DB_PATH=/data/komarnitsky-mail.db
     volumes:
       - "/mailu/panel-data:/data"

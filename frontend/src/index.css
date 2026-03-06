@@ -288,7 +288,7 @@ header {
 }
 
 .mail-body-frame {
-  width: 100%; min-height: 400px; height: 60vh;
+  width: 100%; min-height: 500px; height: 70vh;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: #fff;

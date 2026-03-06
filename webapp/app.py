@@ -151,21 +151,30 @@ def decode_header_value(val):
 
 def get_email_body(msg):
     if msg.is_multipart():
+        html_body = None
+        text_body = None
         for part in msg.walk():
             ct = part.get_content_type()
-            if ct == 'text/html':
+            if part.get_content_disposition() == 'attachment':
+                continue
+            if ct == 'text/html' and not html_body:
                 payload = part.get_payload(decode=True)
                 charset = part.get_content_charset() or 'utf-8'
-                return payload.decode(charset, errors='replace'), 'html'
-            if ct == 'text/plain':
+                html_body = payload.decode(charset, errors='replace')
+            elif ct == 'text/plain' and not text_body:
                 payload = part.get_payload(decode=True)
                 charset = part.get_content_charset() or 'utf-8'
-                return payload.decode(charset, errors='replace'), 'text'
+                text_body = payload.decode(charset, errors='replace')
+        if html_body:
+            return html_body, 'html'
+        if text_body:
+            return text_body, 'text'
     else:
         payload = msg.get_payload(decode=True)
-        charset = msg.get_content_charset() or 'utf-8'
-        ct = msg.get_content_type()
-        return payload.decode(charset, errors='replace'), 'html' if 'html' in ct else 'text'
+        if payload:
+            charset = msg.get_content_charset() or 'utf-8'
+            ct = msg.get_content_type()
+            return payload.decode(charset, errors='replace'), 'html' if 'html' in ct else 'text'
     return '', 'text'
 
 

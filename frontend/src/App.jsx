@@ -2,6 +2,10 @@ import { useState, useEffect } from 'react'
 
 const API = '/api'
 
+function wrapHtml(html) {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><base target="_blank"><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;line-height:1.6;color:#222;padding:12px;margin:0;word-break:break-word}a{color:#1a73e8}img{max-width:100%;height:auto}pre,code{white-space:pre-wrap;word-break:break-all}table{max-width:100%;border-collapse:collapse}td,th{padding:4px 8px}</style></head><body>${html}</body></html>`
+}
+
 function App() {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -118,7 +122,7 @@ function Inbox({ user, onLogout }) {
                 <span>Date: {detail.date}</span>
               </div>
               {detail.body_type === 'html' ?
-                <iframe className="mail-body-frame" srcDoc={detail.body} sandbox="allow-same-origin" /> :
+                <iframe className="mail-body-frame" srcDoc={wrapHtml(detail.body)} sandbox="allow-same-origin allow-popups" /> :
                 <pre className="mail-body-text">{detail.body}</pre>
               }
             </div>
@@ -129,7 +133,7 @@ function Inbox({ user, onLogout }) {
   )
 }
 
-// ==================== ADMIN ====================
+// ==================== ADMIN ======================================
 function Admin({ user, onLogout }) {
   const [tab, setTab] = useState('mail')
 
@@ -239,7 +243,7 @@ function AdminMail({ user }) {
               <span>Date: {detail.date}</span>
             </div>
             {detail.body_type === 'html' ?
-              <iframe className="mail-body-frame" srcDoc={detail.body} sandbox="allow-same-origin" /> :
+              <iframe className="mail-body-frame" srcDoc={wrapHtml(detail.body)} sandbox="allow-same-origin allow-popups" /> :
               <pre className="mail-body-text">{detail.body}</pre>
             }
           </div>

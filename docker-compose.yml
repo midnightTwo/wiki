@@ -178,12 +178,13 @@ services:
   # Komarnitsky Panel — красивая админка
   # ==========================================
   panel:
+    image: ghcr.io/midnighttwo/wiki-panel:latest
     build: .
     restart: always
     env_file: mailu.env
     environment:
       - MAIL_DOMAIN=kmr-mail.online
-      - DB_PATH=/data/komarnitsky-mail.db
+      - DB_PATH=/data/panel.db
     volumes:
       - "/mailu/panel-data:/data"
       - "/var/run/docker.sock:/var/run/docker.sock"

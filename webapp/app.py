@@ -36,8 +36,14 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         email TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL,
+        tags TEXT NOT NULL DEFAULT '{}',
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )''')
+    # Add tags column if missing (migration)
+    try:
+        db.execute('ALTER TABLE generated_accounts ADD COLUMN tags TEXT NOT NULL DEFAULT \'{}\'')
+    except Exception:
+        pass
     db.commit()
     db.close()
 
@@ -357,10 +363,34 @@ def mailu_command(cmd):
 def api_admin_accounts():
     db = get_db()
     accounts = db.execute(
-        'SELECT email, password, created_at FROM generated_accounts ORDER BY id DESC'
+        'SELECT email, password, tags, created_at FROM generated_accounts ORDER BY id DESC'
     ).fetchall()
     db.close()
-    return jsonify({'accounts': [dict(a) for a in accounts]})
+    result = []
+    for a in accounts:
+        d = dict(a)
+        try:
+            d['tags'] = json.loads(d.get('tags') or '{}')
+        except Exception:
+            d['tags'] = {}
+        result.append(d)
+    return jsonify({'accounts': result})
+
+
+@app.route('/api/admin/tags', methods=['POST'])
+@admin_required
+def api_admin_tags():
+    data = request.get_json()
+    email_addr = (data.get('email') or '').strip()
+    tags = data.get('tags', {})
+    if not email_addr:
+        return jsonify({'error': 'Email required'}), 400
+    db = get_db()
+    db.execute('UPDATE generated_accounts SET tags = ? WHERE email = ?',
+               (json.dumps(tags), email_addr))
+    db.commit()
+    db.close()
+    return jsonify({'ok': True})
 
 
 @app.route('/api/admin/create', methods=['POST'])

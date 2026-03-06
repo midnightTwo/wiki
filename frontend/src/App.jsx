@@ -258,12 +258,38 @@ function AccountManager() {
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState('')
 
+  const TAGS = [
+    { key: 'cursor', label: 'Cursor AI', icon: '⌨️' },
+    { key: 'chatgpt', label: 'ChatGPT', icon: '🤖' },
+    { key: 'claude', label: 'Claude', icon: '🧠' },
+    { key: 'copilot', label: 'Copilot', icon: '✈️' },
+    { key: 'midjourney', label: 'Midjourney', icon: '🎨' },
+    { key: 'other', label: 'Other', icon: '📌' },
+  ]
+  const STATUS_CYCLE = [null, 'wait', 'ok', 'fail']
+  const STATUS_ICON = { wait: '⏳', ok: '✅', fail: '❌' }
+
   const load = () => {
     fetch(`${API}/admin/accounts`).then(r => r.json())
       .then(data => setAccounts(data.accounts || []))
   }
 
   useEffect(load, [])
+
+  const toggleTag = async (email, tagKey, currentTags) => {
+    const current = currentTags[tagKey] || null
+    const idx = STATUS_CYCLE.indexOf(current)
+    const next = STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length]
+    const newTags = { ...currentTags }
+    if (next === null) delete newTags[tagKey]
+    else newTags[tagKey] = next
+    setAccounts(prev => prev.map(a => a.email === email ? { ...a, tags: newTags } : a))
+    await fetch(`${API}/admin/tags`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, tags: newTags })
+    })
+  }
 
   const create = async (e) => {
     e.preventDefault()
@@ -351,6 +377,22 @@ function AccountManager() {
             <div className="account-info">
               <span className="account-email">{a.email}</span>
               <span className="account-pass">{a.password}</span>
+              <div className="account-tags">
+                {TAGS.map(t => {
+                  const status = (a.tags || {})[t.key] || null
+                  return (
+                    <button
+                      key={t.key}
+                      className={`tag-btn ${status ? 'tag-' + status : 'tag-off'}`}
+                      title={`${t.label}${status ? ' — ' + status : ''}`}
+                      onClick={() => toggleTag(a.email, t.key, a.tags || {})}
+                    >
+                      <span className="tag-icon">{t.icon}</span>
+                      {status && <span className="tag-status">{STATUS_ICON[status]}</span>}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
             <div className="account-actions">
               <button className="copy-btn" onClick={() => copy(`${a.email}:${a.password}`)}>{copied === `${a.email}:${a.password}` ? 'OK' : 'Copy'}</button>

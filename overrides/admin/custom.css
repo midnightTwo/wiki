@@ -1,0 +1,523 @@
+/* =====================================================
+   KMR Mail — Dark Red Neon Theme for Mailu Admin/SSO
+   ===================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --bg-0: #0a0406;
+  --bg-1: #0f0709;
+  --bg-2: #1a0a0e;
+  --bg-3: #1f0c12;
+  --bg-4: #2a1018;
+  --bg-input: #150810;
+  --border: #3a1520;
+  --border-hover: #ff1a40;
+  --text: #f0e6e8;
+  --text-secondary: #b89098;
+  --accent: #ff1a40;
+  --accent-2: #ff3355;
+  --accent-glow: rgba(255, 26, 64, 0.6);
+  --neon-glow: 0 0 10px rgba(255,26,64,0.6), 0 0 40px rgba(255,26,64,0.2), 0 0 80px rgba(255,26,64,0.1);
+}
+
+/* ---- Global ---- */
+body, html {
+  background: var(--bg-0) !important;
+  color: var(--text) !important;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  min-height: 100vh;
+}
+
+/* ---- Animated Background ---- */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: 
+    radial-gradient(ellipse at 20% 50%, rgba(255,26,64,0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(255,51,85,0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 90%, rgba(204,0,48,0.05) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+  animation: bgPulse 8s ease-in-out infinite alternate;
+}
+
+@keyframes bgPulse {
+  0% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+
+/* ---- Sidebar ---- */
+.main-sidebar, .sidebar, .brand-link,
+.main-sidebar .sidebar,
+.sidebar-dark-primary, .sidebar-dark-lightblue,
+aside.main-sidebar {
+  background: var(--bg-1) !important;
+  border-right: 1px solid var(--border) !important;
+}
+
+.brand-link {
+  border-bottom: 1px solid var(--border) !important;
+  background: linear-gradient(135deg, var(--bg-2), var(--bg-1)) !important;
+}
+
+.brand-link .brand-text,
+.brand-link .brand-image {
+  color: var(--accent) !important;
+  text-shadow: 0 0 20px var(--accent-glow);
+  font-weight: 700 !important;
+}
+
+.nav-sidebar .nav-item .nav-link {
+  color: var(--text-secondary) !important;
+  border-radius: 8px !important;
+  margin: 2px 8px !important;
+  transition: all 0.3s ease !important;
+}
+
+.nav-sidebar .nav-item .nav-link:hover {
+  background: rgba(255,26,64,0.1) !important;
+  color: var(--accent) !important;
+  box-shadow: 0 0 15px rgba(255,26,64,0.15);
+}
+
+.nav-sidebar .nav-item .nav-link.active {
+  background: rgba(255,26,64,0.15) !important;
+  color: var(--accent) !important;
+  box-shadow: 0 0 20px rgba(255,26,64,0.2);
+}
+
+.nav-sidebar .nav-item .nav-link .nav-icon {
+  color: var(--accent) !important;
+}
+
+.sidebar-mini .nav-sidebar .nav-link p,
+.user-panel .info a {
+  color: var(--text) !important;
+}
+
+.sidebar a[target="_blank"]::after {
+  display: none !important;
+}
+
+/* ---- Top Navbar ---- */
+.main-header, .main-header.navbar {
+  background: var(--bg-1) !important;
+  border-bottom: 1px solid var(--border) !important;
+  box-shadow: 0 2px 20px rgba(0,0,0,0.5) !important;
+}
+
+.main-header .nav-link,
+.main-header .navbar-nav .nav-link {
+  color: var(--text) !important;
+}
+
+/* ---- Content Area ---- */
+.content-wrapper, .main-footer, .wrapper {
+  background: var(--bg-0) !important;
+  color: var(--text) !important;
+}
+
+.content-header h1 {
+  color: var(--text) !important;
+  font-weight: 700 !important;
+}
+
+/* ---- Cards ---- */
+.card {
+  background: var(--bg-2) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 30px rgba(0,0,0,0.4) !important;
+  color: var(--text) !important;
+}
+
+.card-header {
+  background: var(--bg-3) !important;
+  border-bottom: 1px solid var(--border) !important;
+  color: var(--text) !important;
+  border-radius: 12px 12px 0 0 !important;
+}
+
+.card-title {
+  color: var(--text) !important;
+  font-weight: 600 !important;
+}
+
+.card-footer {
+  background: var(--bg-3) !important;
+  border-top: 1px solid var(--border) !important;
+}
+
+/* ---- Tables ---- */
+.table, .table thead th, .table td, .table th {
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+
+.table thead th {
+  background: var(--bg-3) !important;
+  color: var(--accent) !important;
+  font-weight: 600 !important;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  letter-spacing: 0.5px;
+}
+
+.table-striped tbody tr:nth-of-type(odd) {
+  background: rgba(255,26,64,0.03) !important;
+}
+
+.table-hover tbody tr:hover {
+  background: rgba(255,26,64,0.08) !important;
+}
+
+/* ---- Forms & Inputs ---- */
+.form-control, input, select, textarea {
+  background: var(--bg-input) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+  border-radius: 8px !important;
+  transition: all 0.3s ease !important;
+}
+
+.form-control:focus, input:focus, select:focus, textarea:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px rgba(255,26,64,0.15), 0 0 20px rgba(255,26,64,0.1) !important;
+  outline: none !important;
+}
+
+label, .control-label {
+  color: var(--text-secondary) !important;
+  font-weight: 500 !important;
+}
+
+/* ---- Buttons ---- */
+.btn-primary, .btn-info, .btn-lightblue {
+  background: linear-gradient(135deg, #ff1a40 0%, #cc0030 100%) !important;
+  border: none !important;
+  color: #fff !important;
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  text-shadow: none !important;
+  box-shadow: 0 4px 15px rgba(255,26,64,0.3) !important;
+  transition: all 0.3s ease !important;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.btn-primary:hover, .btn-info:hover, .btn-lightblue:hover {
+  background: linear-gradient(135deg, #ff3355 0%, #ff1a40 100%) !important;
+  box-shadow: 0 6px 25px rgba(255,26,64,0.5), var(--neon-glow) !important;
+  transform: translateY(-1px);
+}
+
+.btn-secondary, .btn-default {
+  background: var(--bg-3) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+  border-radius: 8px !important;
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, #ff1a40, #cc0030) !important;
+  border: none !important;
+  border-radius: 8px !important;
+}
+
+.btn-success {
+  background: linear-gradient(135deg, #00ff88, #00cc66) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  color: #000 !important;
+}
+
+/* ---- Login Page (SSO) ---- */
+.login-page, .register-page {
+  background: var(--bg-0) !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}
+
+.login-page::before, .register-page::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: 
+    radial-gradient(ellipse at 20% 50%, rgba(255,26,64,0.12) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(255,51,85,0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 90%, rgba(204,0,48,0.06) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+  animation: bgPulse 8s ease-in-out infinite alternate;
+}
+
+.login-box, .register-box {
+  position: relative;
+  z-index: 1;
+  width: 400px !important;
+  max-width: 95vw !important;
+}
+
+.login-box .card, .register-box .card {
+  background: var(--bg-2) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 8px 60px rgba(0,0,0,0.6), 0 0 40px rgba(255,26,64,0.08) !important;
+  overflow: hidden;
+}
+
+.login-box .card-body, .register-box .card-body {
+  padding: 2rem !important;
+}
+
+.login-logo a, .register-logo a,
+.login-box-msg, .register-box-msg {
+  color: var(--text) !important;
+  font-weight: 700 !important;
+}
+
+.login-logo a, .register-logo a {
+  font-size: 1.8rem !important;
+  color: var(--accent) !important;
+  text-shadow: 0 0 30px var(--accent-glow);
+  text-decoration: none !important;
+}
+
+.login-box .input-group .form-control {
+  background: var(--bg-input) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+  height: 45px !important;
+}
+
+.login-box .input-group-text, .input-group-append .input-group-text {
+  background: var(--bg-3) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--accent) !important;
+}
+
+/* ---- Alerts & Badges ---- */
+.alert {
+  border-radius: 8px !important;
+  border: 1px solid var(--border) !important;
+}
+
+.alert-info {
+  background: rgba(0,170,255,0.1) !important;
+  color: #66ccff !important;
+  border-color: rgba(0,170,255,0.3) !important;
+}
+
+.alert-success {
+  background: rgba(0,255,136,0.1) !important;
+  color: #00ff88 !important;
+  border-color: rgba(0,255,136,0.3) !important;
+}
+
+.alert-danger, .alert-error {
+  background: rgba(255,26,64,0.1) !important;
+  color: var(--accent) !important;
+  border-color: rgba(255,26,64,0.3) !important;
+}
+
+.badge-primary, .badge-info {
+  background: var(--accent) !important;
+}
+
+/* ---- Pagination ---- */
+.page-link {
+  background: var(--bg-2) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+.page-item.active .page-link {
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+}
+
+/* ---- Dropdown ---- */
+.dropdown-menu {
+  background: var(--bg-2) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 30px rgba(0,0,0,0.5) !important;
+}
+
+.dropdown-item {
+  color: var(--text) !important;
+}
+
+.dropdown-item:hover {
+  background: rgba(255,26,64,0.1) !important;
+  color: var(--accent) !important;
+}
+
+/* ---- Modal ---- */
+.modal-content {
+  background: var(--bg-2) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 12px !important;
+  color: var(--text) !important;
+}
+
+.modal-header {
+  border-bottom: 1px solid var(--border) !important;
+}
+
+.modal-footer {
+  border-top: 1px solid var(--border) !important;
+}
+
+/* ---- Footer ---- */
+.main-footer {
+  background: var(--bg-1) !important;
+  border-top: 1px solid var(--border) !important;
+  color: var(--text-secondary) !important;
+}
+
+/* Hide "Built with Flask and AdminLTE" and GitHub link */
+.main-footer,
+footer {
+  visibility: hidden !important;
+  height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+}
+
+/* ---- Scrollbar ---- */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-0);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+/* ---- Links ---- */
+a {
+  color: var(--accent) !important;
+  transition: all 0.3s ease;
+}
+
+a:hover {
+  color: var(--accent-2) !important;
+  text-shadow: 0 0 10px var(--accent-glow);
+}
+
+/* ---- Breadcrumb ---- */
+.breadcrumb {
+  background: transparent !important;
+}
+
+.breadcrumb-item a {
+  color: var(--accent) !important;
+}
+
+.breadcrumb-item.active {
+  color: var(--text-secondary) !important;
+}
+
+/* ---- Mobile Responsive ---- */
+@media (max-width: 768px) {
+  .login-box, .register-box {
+    width: 95vw !important;
+    margin: 10px auto !important;
+  }
+
+  .login-box .card-body, .register-box .card-body {
+    padding: 1.5rem !important;
+  }
+
+  .content-wrapper {
+    margin-left: 0 !important;
+  }
+
+  .main-sidebar {
+    z-index: 9999 !important;
+  }
+
+  .card {
+    margin: 0.5rem !important;
+    border-radius: 8px !important;
+  }
+
+  .table {
+    font-size: 0.85rem !important;
+  }
+
+  .btn {
+    font-size: 0.85rem !important;
+    padding: 0.4rem 0.8rem !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .login-logo a {
+    font-size: 1.4rem !important;
+  }
+
+  .card-body {
+    padding: 1rem !important;
+  }
+
+  .table td, .table th {
+    padding: 0.5rem 0.3rem !important;
+    font-size: 0.8rem !important;
+  }
+}
+
+/* ---- Info boxes ---- */
+.info-box, .small-box {
+  background: var(--bg-2) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 12px !important;
+  color: var(--text) !important;
+}
+
+.info-box .info-box-icon {
+  background: rgba(255,26,64,0.15) !important;
+  color: var(--accent) !important;
+}
+
+.small-box .inner h3 {
+  color: var(--text) !important;
+}
+
+/* ---- Checkbox/Radio ---- */
+.custom-control-input:checked ~ .custom-control-label::before {
+  background-color: var(--accent) !important;
+  border-color: var(--accent) !important;
+}
+
+/* ---- Progress ---- */
+.progress {
+  background: var(--bg-3) !important;
+  border-radius: 8px !important;
+}
+
+.progress-bar {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2)) !important;
+}
+
+/* ---- Animations ---- */
+.card, .btn, .nav-link, .form-control, .table tr {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}

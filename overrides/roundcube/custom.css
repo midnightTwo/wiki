@@ -1,0 +1,480 @@
+/* =====================================================
+   KMR Mail — Dark Red Neon Theme for Roundcube Webmail
+   ===================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --rc-bg-0: #0a0406;
+  --rc-bg-1: #0f0709;
+  --rc-bg-2: #1a0a0e;
+  --rc-bg-3: #1f0c12;
+  --rc-bg-4: #2a1018;
+  --rc-bg-input: #150810;
+  --rc-border: #3a1520;
+  --rc-text: #f0e6e8;
+  --rc-text-sec: #b89098;
+  --rc-accent: #ff1a40;
+  --rc-accent-2: #ff3355;
+  --rc-accent-glow: rgba(255, 26, 64, 0.6);
+}
+
+/* ---- Global ---- */
+body, html {
+  background: var(--rc-bg-0) !important;
+  color: var(--rc-text) !important;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+}
+
+/* ---- Animated Background ---- */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: 
+    radial-gradient(ellipse at 20% 50%, rgba(255,26,64,0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(255,51,85,0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 90%, rgba(204,0,48,0.05) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: -1;
+  animation: rcBgPulse 8s ease-in-out infinite alternate;
+}
+
+@keyframes rcBgPulse {
+  0% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+
+/* ---- Login Screen ---- */
+#login-form {
+  background: var(--rc-bg-2) !important;
+  border: 1px solid var(--rc-border) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 8px 60px rgba(0,0,0,0.6), 0 0 40px rgba(255,26,64,0.08) !important;
+  padding: 2rem !important;
+}
+
+#login-form .box-inner {
+  background: transparent !important;
+}
+
+#login-form td.title {
+  color: var(--rc-accent) !important;
+  font-size: 1.5rem !important;
+  font-weight: 700 !important;
+  text-shadow: 0 0 30px var(--rc-accent-glow);
+}
+
+/* ---- Task Bar / Header ---- */
+#taskbar, #header, .toolbar,
+#layout > .header,
+#layout-menu {
+  background: var(--rc-bg-1) !important;
+  border-bottom: 1px solid var(--rc-border) !important;
+  border-right: 1px solid var(--rc-border) !important;
+}
+
+/* ---- Main Layout ---- */
+#layout, #mainscreen, .content,
+#layout > div,
+.sidebar, #sidebar, .list,
+#layout-list, #layout-content, #layout-sidebar {
+  background: var(--rc-bg-0) !important;
+  border-color: var(--rc-border) !important;
+  color: var(--rc-text) !important;
+}
+
+/* ---- Sidebar ---- */
+#layout-sidebar, .sidebarmenu,
+#mailboxlist-container,
+.folderlist {
+  background: var(--rc-bg-1) !important;
+  border-right: 1px solid var(--rc-border) !important;
+}
+
+/* ---- Folder List ---- */
+#mailboxlist li a,
+.listing li a,
+.treelist li a,
+.folderlist li a {
+  color: var(--rc-text-sec) !important;
+  border-radius: 6px !important;
+  transition: all 0.2s ease !important;
+}
+
+#mailboxlist li a:hover,
+.listing li a:hover,
+.treelist li a:hover,
+.folderlist li a:hover {
+  background: rgba(255,26,64,0.08) !important;
+  color: var(--rc-accent) !important;
+}
+
+#mailboxlist li.selected > a,
+.listing li.selected > a,
+.treelist li.selected > a,
+.folderlist li.selected > a {
+  background: rgba(255,26,64,0.15) !important;
+  color: var(--rc-accent) !important;
+  box-shadow: 0 0 15px rgba(255,26,64,0.15);
+}
+
+.unreadcount {
+  background: var(--rc-accent) !important;
+  color: #fff !important;
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+}
+
+/* ---- Message List ---- */
+#messagelist, .messagelist,
+table.messagelist,
+#message-list {
+  background: var(--rc-bg-0) !important;
+}
+
+#messagelist tr, .messagelist tr,
+table.messagelist tr {
+  border-bottom: 1px solid rgba(58,21,32,0.5) !important;
+  color: var(--rc-text) !important;
+  transition: background 0.2s ease !important;
+}
+
+#messagelist tr:hover, .messagelist tr:hover,
+table.messagelist tr:hover {
+  background: rgba(255,26,64,0.06) !important;
+}
+
+#messagelist tr.selected, .messagelist tr.selected,
+table.messagelist tr.selected {
+  background: rgba(255,26,64,0.12) !important;
+  color: var(--rc-text) !important;
+}
+
+#messagelist tr.unread td,
+.messagelist tr.unread td {
+  font-weight: 600 !important;
+  color: var(--rc-text) !important;
+}
+
+#messagelist td, .messagelist td {
+  color: var(--rc-text) !important;
+  border-color: rgba(58,21,32,0.3) !important;
+}
+
+.messagelist td.subject span {
+  color: var(--rc-text) !important;
+}
+
+.messagelist td.date, .messagelist td.size {
+  color: var(--rc-text-sec) !important;
+}
+
+/* ---- Message Header ---- */
+#messageheader, .message-header,
+#message-header, .headers-table {
+  background: var(--rc-bg-2) !important;
+  border-bottom: 1px solid var(--rc-border) !important;
+  color: var(--rc-text) !important;
+}
+
+.header-title {
+  color: var(--rc-accent) !important;
+  font-weight: 600 !important;
+}
+
+/* ---- Message Body ---- */
+#messagebody, .message-part {
+  background: var(--rc-bg-0) !important;
+  color: var(--rc-text) !important;
+}
+
+/* ---- Toolbar Buttons ---- */
+.toolbar a, .toolbar button,
+#messagetoolbar a, .toolbarmenu li a,
+a.button, .button.icon {
+  color: var(--rc-text) !important;
+  border-radius: 8px !important;
+  transition: all 0.2s ease !important;
+}
+
+.toolbar a:hover, .toolbar button:hover,
+#messagetoolbar a:hover, a.button:hover {
+  background: rgba(255,26,64,0.1) !important;
+  color: var(--rc-accent) !important;
+}
+
+.toolbar a.active, .toolbar button.active,
+a.button.active {
+  background: rgba(255,26,64,0.15) !important;
+  color: var(--rc-accent) !important;
+}
+
+.toolbar a.disabled, .toolbar button.disabled {
+  opacity: 0.3 !important;
+}
+
+/* ---- Search ---- */
+#quicksearchbar, .searchbar,
+#searchfilter, .searchbox {
+  background: var(--rc-bg-input) !important;
+  border: 1px solid var(--rc-border) !important;
+  border-radius: 8px !important;
+  color: var(--rc-text) !important;
+}
+
+/* ---- Inputs ---- */
+input, select, textarea,
+.form-control, input[type="text"],
+input[type="password"], input[type="email"] {
+  background: var(--rc-bg-input) !important;
+  border: 1px solid var(--rc-border) !important;
+  color: var(--rc-text) !important;
+  border-radius: 8px !important;
+  transition: all 0.3s ease !important;
+  padding: 8px 12px !important;
+}
+
+input:focus, select:focus, textarea:focus,
+.form-control:focus {
+  border-color: var(--rc-accent) !important;
+  box-shadow: 0 0 0 3px rgba(255,26,64,0.15), 0 0 20px rgba(255,26,64,0.1) !important;
+  outline: none !important;
+}
+
+/* ---- Buttons ---- */
+.btn, button.btn, input.button,
+.button.submit, .mainaction,
+a.button.mainaction {
+  background: linear-gradient(135deg, #ff1a40 0%, #cc0030 100%) !important;
+  border: none !important;
+  color: #fff !important;
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  box-shadow: 0 4px 15px rgba(255,26,64,0.3) !important;
+  transition: all 0.3s ease !important;
+  padding: 8px 20px !important;
+  cursor: pointer;
+}
+
+.btn:hover, button.btn:hover,
+input.button:hover, a.button.mainaction:hover {
+  background: linear-gradient(135deg, #ff3355 0%, #ff1a40 100%) !important;
+  box-shadow: 0 6px 25px rgba(255,26,64,0.5) !important;
+  transform: translateY(-1px);
+}
+
+.btn-secondary, button.secondary {
+  background: var(--rc-bg-3) !important;
+  border: 1px solid var(--rc-border) !important;
+  box-shadow: none !important;
+}
+
+/* ---- Dialogs / Popups ---- */
+.ui-dialog, .popupmenu, .popup,
+.ui-widget-content {
+  background: var(--rc-bg-2) !important;
+  border: 1px solid var(--rc-border) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.6) !important;
+  color: var(--rc-text) !important;
+}
+
+.ui-dialog-titlebar, .ui-widget-header {
+  background: var(--rc-bg-3) !important;
+  border-bottom: 1px solid var(--rc-border) !important;
+  color: var(--rc-text) !important;
+}
+
+.popupmenu li a {
+  color: var(--rc-text) !important;
+}
+
+.popupmenu li a:hover {
+  background: rgba(255,26,64,0.1) !important;
+  color: var(--rc-accent) !important;
+}
+
+/* ---- Compose ---- */
+#compose-content, #composebody,
+.compose-header, #composeheaders {
+  background: var(--rc-bg-0) !important;
+  color: var(--rc-text) !important;
+}
+
+#composebody, #compose_body_container,
+.html-editor {
+  background: var(--rc-bg-2) !important;
+  color: var(--rc-text) !important;
+  border: 1px solid var(--rc-border) !important;
+  border-radius: 8px !important;
+}
+
+/* ---- Scrollbar ---- */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--rc-bg-0);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--rc-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--rc-accent);
+}
+
+/* ---- Notifications ---- */
+#messagestack, .notice, .ui-notice {
+  border-radius: 8px !important;
+}
+
+#messagestack div.notice {
+  background: rgba(0,255,136,0.15) !important;
+  color: #00ff88 !important;
+  border: 1px solid rgba(0,255,136,0.3) !important;
+}
+
+#messagestack div.error {
+  background: rgba(255,26,64,0.15) !important;
+  color: var(--rc-accent) !important;
+  border: 1px solid rgba(255,26,64,0.3) !important;
+}
+
+#messagestack div.warning {
+  background: rgba(255,170,0,0.15) !important;
+  color: #ffaa00 !important;
+  border: 1px solid rgba(255,170,0,0.3) !important;
+}
+
+/* ---- Contact list ---- */
+#contacts-table tr, #directorylist li a {
+  color: var(--rc-text) !important;
+  border-color: var(--rc-border) !important;
+}
+
+#contacts-table tr:hover, #directorylist li a:hover {
+  background: rgba(255,26,64,0.06) !important;
+}
+
+#contacts-table tr.selected {
+  background: rgba(255,26,64,0.12) !important;
+}
+
+/* ---- Settings ---- */
+.propform td, .propform th,
+.listing tbody td {
+  color: var(--rc-text) !important;
+  border-color: var(--rc-border) !important;
+}
+
+fieldset {
+  border-color: var(--rc-border) !important;
+}
+
+fieldset legend {
+  color: var(--rc-accent) !important;
+  font-weight: 600 !important;
+}
+
+/* ---- Quota ---- */
+.quota {
+  background: var(--rc-bg-3) !important;
+  border-radius: 8px !important;
+}
+
+/* ---- Tabs ---- */
+.tabsbar, #settings-tabs, .tablink {
+  background: var(--rc-bg-1) !important;
+  border-bottom: 1px solid var(--rc-border) !important;
+}
+
+.tablink a, #settings-tabs a {
+  color: var(--rc-text-sec) !important;
+  border-radius: 8px 8px 0 0 !important;
+}
+
+.tablink a.active, .tablink a:hover,
+#settings-tabs a.active {
+  background: rgba(255,26,64,0.1) !important;
+  color: var(--rc-accent) !important;
+}
+
+/* ---- Misc ---- */
+hr {
+  border-color: var(--rc-border) !important;
+}
+
+.boxcontent, .uibox {
+  background: var(--rc-bg-0) !important;
+}
+
+#countcontrols, .countdisplay {
+  color: var(--rc-text-sec) !important;
+}
+
+/* ---- Elastic Skin Specific ---- */
+.menu a.active::before,
+.menu a.selected::before {
+  background: var(--rc-accent) !important;
+}
+
+.header a.button.icon::before {
+  color: var(--rc-text) !important;
+}
+
+#layout > div > .header,
+#layout > div > .footer {
+  background: var(--rc-bg-1) !important;
+  border-color: var(--rc-border) !important;
+}
+
+/* ---- Mobile ---- */
+@media (max-width: 768px) {
+  #login-form {
+    margin: 1rem !important;
+    padding: 1.5rem !important;
+    border-radius: 12px !important;
+  }
+
+  #layout {
+    flex-direction: column !important;
+  }
+
+  #layout-sidebar {
+    width: 100% !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--rc-border) !important;
+  }
+
+  .toolbar a, .toolbar button {
+    padding: 8px !important;
+  }
+
+  #messagelist td {
+    padding: 6px 4px !important;
+    font-size: 0.85rem !important;
+  }
+}
+
+@media (max-width: 480px) {
+  #login-form td.title {
+    font-size: 1.2rem !important;
+  }
+
+  .toolbar {
+    flex-wrap: wrap !important;
+  }
+
+  #messagelist td.subject {
+    max-width: 150px !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

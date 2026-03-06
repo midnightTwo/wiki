@@ -34,8 +34,8 @@ RUN mkdir -p /data
 WORKDIR /app/webapp
 
 ENV FLASK_APP=app.py
-ENV MAIL_DOMAIN=komarnitsky.wiki
-ENV DB_PATH=/data/komarnitsky-mail.db
+ENV MAIL_DOMAIN=kmr-mail.online
+ENV DB_PATH=/data/panel.db
 
 EXPOSE 8000
 

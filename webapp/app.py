@@ -1,302 +1,378 @@
-"""
-Komarnitsky Mail — API Backend
-Flask JSON API для React фронтенда
-Пароль админки: himarra228
-"""
-
 import os
-import subprocess
-import hashlib
-import secrets
+import json
+import imaplib
+import email
+import email.header
+import email.utils
 import sqlite3
-from datetime import timedelta
+import secrets
+import subprocess
+from datetime import datetime
 from functools import wraps
-
-from flask import Flask, request, jsonify, session, g, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, session
 
 app = Flask(__name__, static_folder='../frontend/dist', static_url_path='')
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=12)
 
-# ---- Config ----
-ADMIN_PASSWORD_HASH = hashlib.sha256('himarra228'.encode()).hexdigest()
-DOMAIN = os.environ.get('MAIL_DOMAIN', 'komarnitsky.wiki')
-DB_PATH = os.environ.get('DB_PATH', os.path.join(os.path.dirname(__file__), 'mail.db'))
+DOMAIN = os.environ.get('MAIL_DOMAIN', 'kmr-mail.online')
+IMAP_HOST = os.environ.get('IMAP_HOST', '192.168.203.8')
+IMAP_PORT = int(os.environ.get('IMAP_PORT', '993'))
+ADMIN_CONTAINER = os.environ.get('ADMIN_CONTAINER', 'wiki-admin-1')
+DB_PATH = os.environ.get('DB_PATH', '/data/panel.db')
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'himarra228')
 
 
-# ---- Database ----
+# --- Database ---
+
 def get_db():
-    if 'db' not in g:
-        g.db = sqlite3.connect(DB_PATH)
-        g.db.row_factory = sqlite3.Row
-    return g.db
-
-
-@app.teardown_appcontext
-def close_db(exception):
-    db = g.pop('db', None)
-    if db is not None:
-        db.close()
+    db = sqlite3.connect(DB_PATH)
+    db.row_factory = sqlite3.Row
+    return db
 
 
 def init_db():
-    os.makedirs(os.path.dirname(DB_PATH) if os.path.dirname(DB_PATH) else '.', exist_ok=True)
-    db = sqlite3.connect(DB_PATH)
-    db.execute('''CREATE TABLE IF NOT EXISTS mailboxes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT UNIQUE NOT NULL,
-        display_name TEXT DEFAULT '', quota INTEGER DEFAULT 1073741824,
-        is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT (datetime('now')),
-        last_login TEXT, messages_received INTEGER DEFAULT 0, messages_sent INTEGER DEFAULT 0
+    db = get_db()
+    db.execute('''CREATE TABLE IF NOT EXISTS generated_accounts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )''')
-    db.execute('''CREATE TABLE IF NOT EXISTS aliases (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, source TEXT NOT NULL,
-        destination TEXT NOT NULL, is_active INTEGER DEFAULT 1,
-        created_at TEXT DEFAULT (datetime('now'))
-    )''')
-    db.execute('''CREATE TABLE IF NOT EXISTS activity_log (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL,
-        details TEXT, timestamp TEXT DEFAULT (datetime('now'))
-    )''')
-    db.execute('''CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)''')
-    db.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('admin_password_hash', ?)", (ADMIN_PASSWORD_HASH,))
     db.commit()
     db.close()
 
 
-def log_activity(action, details=None):
-    try:
-        db = get_db()
-        db.execute('INSERT INTO activity_log (action, details) VALUES (?, ?)', (action, details))
-        db.commit()
-    except Exception:
-        pass
+# --- Auth ---
 
-
-# ---- Mailu Docker ----
-def mailu_command(cmd_args):
-    try:
-        full_cmd = ['docker', 'compose', '-f', '/mailu/docker-compose.yml',
-                     'exec', '-T', 'admin', 'flask', 'mailu'] + cmd_args
-        result = subprocess.run(full_cmd, capture_output=True, text=True, timeout=30)
-        return result.returncode == 0, result.stdout, result.stderr
-    except Exception as e:
-        return False, '', str(e)
-
-
-# ---- Auth ----
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if not session.get('logged_in'):
+        if 'user' not in session:
             return jsonify({'error': 'Unauthorized'}), 401
         return f(*args, **kwargs)
     return decorated
 
 
-def get_admin_hash():
+def admin_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if 'user' not in session or not session.get('is_admin'):
+            return jsonify({'error': 'Forbidden'}), 403
+        return f(*args, **kwargs)
+    return decorated
+
+
+def verify_imap_login(email_addr, password):
     try:
-        db = get_db()
-        row = db.execute("SELECT value FROM settings WHERE key='admin_password_hash'").fetchone()
-        return row['value'] if row else ADMIN_PASSWORD_HASH
+        imap = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT)
+        imap.login(email_addr, password)
+        imap.logout()
+        return True
+    except imaplib.IMAP4.error:
+        return False
     except Exception:
-        return ADMIN_PASSWORD_HASH
+        try:
+            imap = imaplib.IMAP4(IMAP_HOST, 143)
+            imap.login(email_addr, password)
+            imap.logout()
+            return True
+        except Exception:
+            return False
 
 
-# =====================================================
-# API — Auth
-# =====================================================
+# --- API Routes ---
+
 @app.route('/api/login', methods=['POST'])
 def api_login():
     data = request.get_json()
-    pw_hash = hashlib.sha256(data.get('password', '').encode()).hexdigest()
-    if pw_hash == get_admin_hash():
-        session['logged_in'] = True
-        session.permanent = True
-        log_activity('login', 'Успешный вход в админку')
-        return jsonify({'success': True})
-    log_activity('login_failed', 'Неудачная попытка входа')
-    return jsonify({'success': False, 'error': 'Неверный пароль'}), 401
+    if not data:
+        return jsonify({'error': 'No data'}), 400
+
+    email_addr = (data.get('email') or '').strip()
+    password = data.get('password', '')
+
+    if not email_addr or not password:
+        return jsonify({'error': 'Email and password required'}), 400
+
+    if '@' not in email_addr:
+        email_addr = f'{email_addr}@{DOMAIN}'
+
+    if not verify_imap_login(email_addr, password):
+        return jsonify({'error': 'Wrong email or password'}), 401
+
+    is_admin = email_addr == f'admin@{DOMAIN}'
+
+    session['user'] = email_addr
+    session['password'] = password
+    session['is_admin'] = is_admin
+
+    return jsonify({
+        'ok': True,
+        'email': email_addr,
+        'is_admin': is_admin
+    })
 
 
 @app.route('/api/logout', methods=['POST'])
 def api_logout():
     session.clear()
-    return jsonify({'success': True})
+    return jsonify({'ok': True})
 
 
-# =====================================================
-# API — Stats
-# =====================================================
-@app.route('/api/stats')
+@app.route('/api/me')
 @login_required
-def api_stats():
-    db = get_db()
+def api_me():
     return jsonify({
-        'total_mailboxes': db.execute('SELECT COUNT(*) as c FROM mailboxes').fetchone()['c'],
-        'active_mailboxes': db.execute('SELECT COUNT(*) as c FROM mailboxes WHERE is_active=1').fetchone()['c'],
-        'total_aliases': db.execute('SELECT COUNT(*) as c FROM aliases').fetchone()['c'],
-        'domain': DOMAIN
+        'email': session['user'],
+        'is_admin': session.get('is_admin', False)
     })
 
 
-# =====================================================
-# API — Mailboxes
-# =====================================================
-@app.route('/api/mailboxes')
+# --- Mail ---
+
+def decode_header_value(val):
+    if not val:
+        return ''
+    decoded = email.header.decode_header(val)
+    parts = []
+    for text, charset in decoded:
+        if isinstance(text, bytes):
+            parts.append(text.decode(charset or 'utf-8', errors='replace'))
+        else:
+            parts.append(text)
+    return ''.join(parts)
+
+
+def get_email_body(msg):
+    if msg.is_multipart():
+        for part in msg.walk():
+            ct = part.get_content_type()
+            if ct == 'text/html':
+                payload = part.get_payload(decode=True)
+                charset = part.get_content_charset() or 'utf-8'
+                return payload.decode(charset, errors='replace'), 'html'
+            if ct == 'text/plain':
+                payload = part.get_payload(decode=True)
+                charset = part.get_content_charset() or 'utf-8'
+                return payload.decode(charset, errors='replace'), 'text'
+    else:
+        payload = msg.get_payload(decode=True)
+        charset = msg.get_content_charset() or 'utf-8'
+        ct = msg.get_content_type()
+        return payload.decode(charset, errors='replace'), 'html' if 'html' in ct else 'text'
+    return '', 'text'
+
+
+@app.route('/api/mail')
 @login_required
-def api_get_mailboxes():
+def api_mail():
+    try:
+        try:
+            imap = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT)
+        except Exception:
+            imap = imaplib.IMAP4(IMAP_HOST, 143)
+        imap.login(session['user'], session['password'])
+
+        messages = []
+
+        for folder in ['INBOX', 'Junk']:
+            try:
+                status, _ = imap.select(folder, readonly=True)
+                if status != 'OK':
+                    continue
+                _, data = imap.search(None, 'ALL')
+                ids = data[0].split()
+                for mid in reversed(ids[-100:]):
+                    _, msg_data = imap.fetch(mid, '(RFC822 FLAGS)')
+                    raw = msg_data[0][1]
+                    msg = email.message_from_bytes(raw)
+
+                    flags_raw = msg_data[0][0].decode() if msg_data[0][0] else ''
+                    is_seen = '\\Seen' in flags_raw
+
+                    date_str = msg.get('Date', '')
+                    try:
+                        date_parsed = email.utils.parsedate_to_datetime(date_str)
+                        date_fmt = date_parsed.strftime('%d.%m.%Y %H:%M')
+                        date_ts = date_parsed.timestamp()
+                    except Exception:
+                        date_fmt = date_str[:20]
+                        date_ts = 0
+
+                    messages.append({
+                        'id': f'{folder}:{mid.decode()}',
+                        'folder': folder,
+                        'from': decode_header_value(msg.get('From', '')),
+                        'to': decode_header_value(msg.get('To', '')),
+                        'subject': decode_header_value(msg.get('Subject', '(no subject)')),
+                        'date': date_fmt,
+                        'timestamp': date_ts,
+                        'seen': is_seen,
+                        'spam': folder == 'Junk'
+                    })
+            except Exception:
+                continue
+
+        imap.logout()
+
+        messages.sort(key=lambda m: m['timestamp'], reverse=True)
+        return jsonify({'messages': messages})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/mail/<path:mail_id>')
+@login_required
+def api_mail_detail(mail_id):
+    try:
+        parts = mail_id.split(':')
+        folder = parts[0]
+        mid = parts[1]
+
+        try:
+            imap = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT)
+        except Exception:
+            imap = imaplib.IMAP4(IMAP_HOST, 143)
+        imap.login(session['user'], session['password'])
+        imap.select(folder)
+        _, msg_data = imap.fetch(mid.encode(), '(RFC822)')
+        raw = msg_data[0][1]
+        msg = email.message_from_bytes(raw)
+
+        body, body_type = get_email_body(msg)
+
+        imap.logout()
+
+        return jsonify({
+            'from': decode_header_value(msg.get('From', '')),
+            'to': decode_header_value(msg.get('To', '')),
+            'subject': decode_header_value(msg.get('Subject', '')),
+            'date': decode_header_value(msg.get('Date', '')),
+            'body': body,
+            'body_type': body_type
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# --- Admin: Account Management ---
+
+def mailu_command(cmd):
+    try:
+        result = subprocess.run(
+            ['docker', 'exec', ADMIN_CONTAINER, 'flask', 'mailu'] + cmd,
+            capture_output=True, text=True, timeout=30
+        )
+        return result.stdout + result.stderr
+    except Exception as e:
+        return str(e)
+
+
+@app.route('/api/admin/accounts')
+@admin_required
+def api_admin_accounts():
     db = get_db()
-    return jsonify([dict(r) for r in db.execute('SELECT * FROM mailboxes ORDER BY created_at DESC').fetchall()])
+    accounts = db.execute(
+        'SELECT email, password, created_at FROM generated_accounts ORDER BY id DESC'
+    ).fetchall()
+    db.close()
+    return jsonify({'accounts': [dict(a) for a in accounts]})
 
 
-@app.route('/api/mailboxes', methods=['POST'])
-@login_required
-def api_create_mailbox():
+@app.route('/api/admin/create', methods=['POST'])
+@admin_required
+def api_admin_create():
     data = request.get_json()
-    username = data.get('username', '').strip().lower()
+    username = (data.get('username') or '').strip()
     password = data.get('password', '')
-    display_name = data.get('display_name', '').strip()
 
     if not username:
-        return jsonify({'success': False, 'error': 'Введи имя'}), 400
+        return jsonify({'error': 'Username required'}), 400
     if not password or len(password) < 6:
-        return jsonify({'success': False, 'error': 'Пароль минимум 6 символов'}), 400
+        return jsonify({'error': 'Password min 6 chars'}), 400
 
-    clean = username.replace('.', '').replace('-', '').replace('_', '')
-    if not clean.isalnum():
-        return jsonify({'success': False, 'error': 'Только буквы, цифры, точки, дефисы'}), 400
+    email_addr = f'{username}@{DOMAIN}'
+    result = mailu_command(['user', username, DOMAIN, password])
 
-    email = f'{username}@{DOMAIN}'
-    mailu_command(['user', username, DOMAIN, password])
+    if 'exists' in result.lower():
+        return jsonify({'error': f'{email_addr} already exists'}), 409
 
     db = get_db()
     try:
-        db.execute('INSERT INTO mailboxes (email, display_name) VALUES (?, ?)', (email, display_name))
+        db.execute(
+            'INSERT INTO generated_accounts (email, password) VALUES (?, ?)',
+            (email_addr, password)
+        )
         db.commit()
     except sqlite3.IntegrityError:
-        return jsonify({'success': False, 'error': f'{email} уже существует'}), 409
+        pass
+    db.close()
 
-    log_activity('create_mailbox', f'Создан ящик {email}')
-    return jsonify({'success': True, 'email': email})
-
-
-@app.route('/api/mailboxes/<path:email>', methods=['DELETE'])
-@login_required
-def api_delete_mailbox(email):
-    mailu_command(['user-delete', email])
-    db = get_db()
-    db.execute('DELETE FROM mailboxes WHERE email = ?', (email,))
-    db.commit()
-    log_activity('delete_mailbox', f'Удалён ящик {email}')
-    return jsonify({'success': True})
+    return jsonify({'ok': True, 'email': email_addr, 'password': password})
 
 
-@app.route('/api/mailboxes/<path:email>/toggle', methods=['POST'])
-@login_required
-def api_toggle_mailbox(email):
-    db = get_db()
-    mb = db.execute('SELECT * FROM mailboxes WHERE email = ?', (email,)).fetchone()
-    if not mb:
-        return jsonify({'success': False}), 404
-    new_status = 0 if mb['is_active'] else 1
-    db.execute('UPDATE mailboxes SET is_active = ? WHERE email = ?', (new_status, email))
-    db.commit()
-    log_activity('toggle_mailbox', f'{email} {"активирован" if new_status else "деактивирован"}')
-    return jsonify({'success': True, 'is_active': new_status})
+@app.route('/api/admin/generate', methods=['POST'])
+@admin_required
+def api_admin_generate():
+    data = request.get_json() or {}
+    count = min(int(data.get('count', 1)), 50)
+
+    created = []
+    for _ in range(count):
+        username = secrets.token_hex(4)
+        password = secrets.token_urlsafe(10)
+        email_addr = f'{username}@{DOMAIN}'
+
+        result = mailu_command(['user', username, DOMAIN, password])
+        if 'exists' in result.lower():
+            continue
+
+        db = get_db()
+        try:
+            db.execute(
+                'INSERT INTO generated_accounts (email, password) VALUES (?, ?)',
+                (email_addr, password)
+            )
+            db.commit()
+        except sqlite3.IntegrityError:
+            pass
+        db.close()
+
+        created.append({'email': email_addr, 'password': password})
+
+    return jsonify({'ok': True, 'created': created})
 
 
-@app.route('/api/mailboxes/password', methods=['POST'])
-@login_required
-def api_change_password():
+@app.route('/api/admin/delete', methods=['POST'])
+@admin_required
+def api_admin_delete():
     data = request.get_json()
-    email = data.get('email', '')
-    new_password = data.get('new_password', '')
-    if len(new_password) < 6:
-        return jsonify({'success': False, 'error': 'Минимум 6 символов'}), 400
-    mailu_command(['password', email.split('@')[0], DOMAIN, new_password])
-    log_activity('change_password', f'Сменён пароль для {email}')
-    return jsonify({'success': True})
+    email_addr = (data.get('email') or '').strip()
+    if not email_addr:
+        return jsonify({'error': 'Email required'}), 400
 
+    parts = email_addr.split('@')
+    if len(parts) != 2:
+        return jsonify({'error': 'Invalid email'}), 400
 
-# =====================================================
-# API — Aliases
-# =====================================================
-@app.route('/api/aliases')
-@login_required
-def api_get_aliases():
+    if email_addr == f'admin@{DOMAIN}':
+        return jsonify({'error': 'Cannot delete admin'}), 403
+
+    mailu_command(['user-delete', parts[0] + '@' + parts[1]])
+
     db = get_db()
-    return jsonify([dict(r) for r in db.execute('SELECT * FROM aliases ORDER BY created_at DESC').fetchall()])
-
-
-@app.route('/api/aliases', methods=['POST'])
-@login_required
-def api_create_alias():
-    data = request.get_json()
-    source = data.get('source', '').strip().lower()
-    destination = data.get('destination', '').strip().lower()
-    if not source or not destination:
-        return jsonify({'success': False, 'error': 'Заполни оба поля'}), 400
-    if '@' not in source:
-        source = f'{source}@{DOMAIN}'
-    db = get_db()
-    db.execute('INSERT INTO aliases (source, destination) VALUES (?, ?)', (source, destination))
+    db.execute('DELETE FROM generated_accounts WHERE email = ?', (email_addr,))
     db.commit()
-    mailu_command(['alias', source.split('@')[0], DOMAIN, destination])
-    log_activity('create_alias', f'Алиас {source} → {destination}')
-    return jsonify({'success': True})
+    db.close()
+
+    return jsonify({'ok': True})
 
 
-@app.route('/api/aliases/<int:alias_id>', methods=['DELETE'])
-@login_required
-def api_delete_alias(alias_id):
-    db = get_db()
-    alias = db.execute('SELECT * FROM aliases WHERE id = ?', (alias_id,)).fetchone()
-    if alias:
-        db.execute('DELETE FROM aliases WHERE id = ?', (alias_id,))
-        db.commit()
-        log_activity('delete_alias', f'Удалён алиас {alias["source"]}')
-    return jsonify({'success': True})
+# --- SPA ---
 
-
-# =====================================================
-# API — Activity
-# =====================================================
-@app.route('/api/activity')
-@login_required
-def api_activity():
-    db = get_db()
-    return jsonify([dict(r) for r in db.execute('SELECT * FROM activity_log ORDER BY timestamp DESC LIMIT 30').fetchall()])
-
-
-# =====================================================
-# API — Settings
-# =====================================================
-@app.route('/api/settings/password', methods=['POST'])
-@login_required
-def api_change_admin_password():
-    data = request.get_json()
-    current_hash = hashlib.sha256(data.get('current_password', '').encode()).hexdigest()
-    if current_hash != get_admin_hash():
-        return jsonify({'success': False, 'error': 'Текущий пароль неверный'}), 403
-    new_pw = data.get('new_password', '')
-    if new_pw != data.get('confirm_password', ''):
-        return jsonify({'success': False, 'error': 'Пароли не совпадают'}), 400
-    if len(new_pw) < 6:
-        return jsonify({'success': False, 'error': 'Минимум 6 символов'}), 400
-    db = get_db()
-    db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('admin_password_hash', ?)",
-               (hashlib.sha256(new_pw.encode()).hexdigest(),))
-    db.commit()
-    log_activity('change_admin_password', 'Пароль админки изменён')
-    return jsonify({'success': True})
-
-
-# =====================================================
-# Serve React SPA
-# =====================================================
-@app.route('/', defaults={'path': ''})
+@app.route('/')
 @app.route('/<path:path>')
-def serve_react(path):
+def serve_spa(path=''):
     if path and os.path.exists(os.path.join(app.static_folder, path)):
         return send_from_directory(app.static_folder, path)
     return send_from_directory(app.static_folder, 'index.html')
@@ -304,4 +380,4 @@ def serve_react(path):
 
 if __name__ == '__main__':
     init_db()
-    app.run(host='0.0.0.0', port=8000, debug=os.environ.get('DEBUG', False))
+    app.run(host='0.0.0.0', port=8000, debug=True)

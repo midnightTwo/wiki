@@ -1,8 +1,6 @@
 # Mailu Mail Server для kmr-mail.online
 # Документация: https://mailu.io/2024.06/
 
-version: "3.8"
-
 services:
   # ==========================================
   # Reverse Proxy (Nginx) — точка входа

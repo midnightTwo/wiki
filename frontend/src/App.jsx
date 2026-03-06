@@ -462,43 +462,43 @@ function AccountManager({ accounts, setAccounts, reload }) {
         </div>
         {filtered.map(a => (
           <div key={a.email} className={`account-card ${selected.has(a.email) ? 'selected' : ''}`}>
-            <div className="account-card-check" onClick={() => toggleSelect(a.email)}>
-              <div className={`checkbox ${selected.has(a.email) ? 'checked' : ''}`}>{selected.has(a.email) ? '✓' : ''}</div>
-            </div>
-            <div className="account-card-body">
-              <div className="account-card-top">
+            <div className="account-card-header">
+              <div className="account-card-check" onClick={() => toggleSelect(a.email)}>
+                <div className={`checkbox ${selected.has(a.email) ? 'checked' : ''}`}>{selected.has(a.email) ? '✓' : ''}</div>
+              </div>
+              <div className="account-card-info">
                 <span className="account-email">{a.email}</span>
                 <span className="account-pass">{a.password}</span>
               </div>
-              <div className="account-tags">
-                {TAGS.map(t => {
-                  const status = (a.tags || {})[t.key] || null
-                  return (
-                    <button
-                      key={t.key}
-                      className={`tag-chip ${status ? 'tag-' + status : 'tag-off'}`}
-                      title={`${t.label}${status ? ' — ' + status : ''}\nClick to cycle status`}
-                      onClick={() => toggleTag(a.email, t.key, a.tags || {})}
-                    >
-                      <TagIcon name={t.key} />
-                      <span className="tag-label">{t.label}</span>
-                      {status && <span className={`tag-dot tag-dot-${status}`}>{STATUS_DOT[status]}</span>}
-                    </button>
-                  )
-                })}
+              <div className="account-card-actions">
+                <button className="act-btn" onClick={() => copy(a.email, 'e:' + a.email)} title="Copy email">
+                  {copied === 'e:' + a.email ? '✓' : 'Email'}
+                </button>
+                <button className="act-btn" onClick={() => copy(a.password, 'p:' + a.email)} title="Copy password">
+                  {copied === 'p:' + a.email ? '✓' : 'Pass'}
+                </button>
+                <button className="act-btn accent" onClick={() => copy(`${a.email}:${a.password}`, 'f:' + a.email)} title="Copy email:password">
+                  {copied === 'f:' + a.email ? '✓' : 'Full'}
+                </button>
+                <button className="act-btn danger" onClick={() => del(a.email)} title="Delete">Del</button>
               </div>
             </div>
-            <div className="account-card-actions">
-              <button className="act-btn copy-email" onClick={() => copy(a.email, 'e:' + a.email)} title="Copy email">
-                {copied === 'e:' + a.email ? '✓' : '📧'}
-              </button>
-              <button className="act-btn copy-pass" onClick={() => copy(a.password, 'p:' + a.email)} title="Copy password">
-                {copied === 'p:' + a.email ? '✓' : '🔑'}
-              </button>
-              <button className="act-btn copy-full" onClick={() => copy(`${a.email}:${a.password}`, 'f:' + a.email)} title="Copy email:password">
-                {copied === 'f:' + a.email ? '✓' : '📋'}
-              </button>
-              <button className="act-btn del-acc" onClick={() => del(a.email)} title="Delete account">🗑</button>
+            <div className="account-card-tags">
+              {TAGS.map(t => {
+                const status = (a.tags || {})[t.key] || null
+                return (
+                  <button
+                    key={t.key}
+                    className={`tag-chip ${status ? 'tag-' + status : 'tag-off'}`}
+                    title={`${t.label}${status ? ' — ' + status : ''}`}
+                    onClick={() => toggleTag(a.email, t.key, a.tags || {})}
+                  >
+                    <TagIcon name={t.key} />
+                    <span className="tag-label">{t.label}</span>
+                    {status && <span className={`tag-dot tag-dot-${status}`}>{STATUS_DOT[status]}</span>}
+                  </button>
+                )
+              })}
             </div>
           </div>
         ))}

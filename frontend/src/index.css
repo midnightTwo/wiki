@@ -454,73 +454,74 @@ header {
 
 /* ============ ACCOUNT CARD ============ */
 .account-card {
-  display: flex; align-items: stretch;
-  margin: 0.4rem 0.8rem;
+  display: flex; flex-direction: column;
+  margin: 0.5rem 1rem;
   background: var(--bg-1);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   transition: all 0.2s;
   overflow: hidden;
 }
-.account-card:first-of-type { margin-top: 0.8rem; }
+.account-card:first-of-type { margin-top: 1rem; }
 .account-card:hover { border-color: var(--border-hover); }
 .account-card.selected { border-color: var(--accent); background: rgba(255,26,64,0.04); }
 
-.account-card-check {
-  display: flex; align-items: center; justify-content: center;
-  width: 36px; min-width: 36px;
-  border-right: 1px solid var(--border);
-  cursor: pointer; transition: background 0.2s;
+.account-card-header {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.7rem 0.8rem;
 }
-.account-card-check:hover { background: var(--bg-2); }
+
+.account-card-check {
+  cursor: pointer; flex-shrink: 0;
+}
 
 .checkbox {
-  width: 16px; height: 16px;
-  border: 1px solid var(--border);
-  border-radius: 3px;
+  width: 18px; height: 18px;
+  border: 1.5px solid var(--border);
+  border-radius: 4px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 0.65rem; color: var(--accent);
+  font-size: 0.7rem; color: var(--accent);
   transition: all 0.15s;
 }
-.checkbox.checked { background: rgba(255,26,64,0.15); border-color: var(--accent); }
+.checkbox:hover { border-color: var(--accent-dim); }
+.checkbox.checked { background: rgba(255,26,64,0.2); border-color: var(--accent); }
 
-.account-card-body {
-  flex: 1; padding: 0.55rem 0.7rem; overflow: hidden; min-width: 0;
+.account-card-info {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: 0.8rem;
 }
 
-.account-card-top {
-  display: flex; align-items: center; gap: 0.6rem;
-  margin-bottom: 0.3rem;
+.account-email {
+  font-size: 0.9rem; color: var(--text); font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.account-pass {
+  font-size: 0.8rem; color: var(--text-dim); font-family: 'Consolas', monospace;
+  opacity: 0.8; flex-shrink: 0;
 }
 
-.account-email { font-size: 0.85rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.account-pass { font-size: 0.75rem; color: var(--text-dim); font-family: monospace; opacity: 0.7; flex-shrink: 0; }
-
-.account-tags {
-  display: flex; gap: 0.3rem; flex-wrap: wrap;
+.account-card-tags {
+  display: flex; gap: 0.35rem; flex-wrap: wrap;
+  padding: 0 0.8rem 0.65rem;
 }
 
 /* ============ ACTION BUTTONS ============ */
 .account-card-actions {
-  display: flex; flex-direction: column;
-  border-left: 1px solid var(--border);
+  display: flex; gap: 0.3rem; flex-shrink: 0; margin-left: auto;
 }
 
 .act-btn {
-  flex: 1; display: flex; align-items: center; justify-content: center;
-  background: transparent; border: none;
+  background: var(--bg-2); border: 1px solid var(--border);
   color: var(--text-dim);
-  width: 34px; cursor: pointer;
-  font-size: 0.75rem;
+  padding: 0.3rem 0.55rem;
+  border-radius: 4px; cursor: pointer;
+  font-size: 0.72rem; font-weight: 500;
   transition: all 0.15s;
-  border-bottom: 1px solid var(--border);
 }
-.act-btn:last-child { border-bottom: none; }
-.act-btn:hover { background: var(--bg-2); }
-.act-btn.copy-email:hover { color: #4fc3f7; }
-.act-btn.copy-pass:hover { color: #ffd54f; }
-.act-btn.copy-full:hover { color: var(--accent); }
-.act-btn.del-acc:hover { color: var(--danger); background: rgba(255,68,102,0.08); }
+.act-btn:hover { border-color: var(--accent-dim); color: var(--text); background: var(--bg-3); }
+.act-btn.accent { color: var(--accent); border-color: rgba(255,26,64,0.3); }
+.act-btn.accent:hover { background: rgba(255,26,64,0.1); border-color: var(--accent); }
+.act-btn.danger:hover { border-color: var(--danger); color: var(--danger); background: rgba(255,68,102,0.08); }
 
 /* ============ MAIL SEARCH ============ */
 .mail-search-bar {

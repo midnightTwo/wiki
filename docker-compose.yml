@@ -184,6 +184,7 @@ services:
     env_file: mailu.env
     environment:
       - MAIL_DOMAIN=kmr-mail.online
+      - IMAP_HOST=imap
       - DB_PATH=/data/panel.db
     volumes:
       - "/mailu/panel-data:/data"

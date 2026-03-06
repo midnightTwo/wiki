@@ -145,36 +145,38 @@ function Inbox({ user, onLogout }) {
 // ==================== ADMIN ======================================
 function Admin({ user, onLogout }) {
   const [tab, setTab] = useState('mail')
+  const [accounts, setAccounts] = useState([])
+
+  const loadAccounts = () => {
+    fetch(`${API}/admin/accounts`).then(r => r.json())
+      .then(data => setAccounts(data.accounts || []))
+  }
+  useEffect(loadAccounts, [])
 
   return (
     <div className="app-wrap">
       <header>
         <span className="logo">KMR MAIL</span>
         <nav className="tabs">
-          <button className={tab === 'mail' ? 'active' : ''} onClick={() => setTab('mail')}>My Mail</button>
+          <button className={tab === 'mail' ? 'active' : ''} onClick={() => setTab('mail')}>Mail</button>
           <button className={tab === 'accounts' ? 'active' : ''} onClick={() => setTab('accounts')}>Accounts</button>
         </nav>
         <span className="user-info">admin</span>
         <button className="logout-btn" onClick={onLogout}>Logout</button>
       </header>
-      {tab === 'mail' ? <AdminMail user={user} /> : <AccountManager />}
+      {tab === 'mail' ? <AdminMail user={user} accounts={accounts} /> : <AccountManager accounts={accounts} setAccounts={setAccounts} reload={loadAccounts} />}
     </div>
   )
 }
 
-function AdminMail({ user }) {
-  const [accounts, setAccounts] = useState([])
+function AdminMail({ user, accounts }) {
   const [currentAccount, setCurrentAccount] = useState(user.email)
   const [messages, setMessages] = useState([])
   const [selected, setSelected] = useState(null)
   const [detail, setDetail] = useState(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-
-  useEffect(() => {
-    fetch(`${API}/admin/accounts`).then(r => r.json())
-      .then(data => setAccounts(data.accounts || []))
-  }, [])
+  const [search, setSearch] = useState('')
 
   const loadMail = (silent) => {
     if (!silent) setLoading(true)
@@ -223,19 +225,41 @@ function AdminMail({ user }) {
   }
 
   const allAccounts = [user.email, ...accounts.map(a => a.email)]
+  const curAcc = accounts.find(a => a.email === currentAccount)
+  const curTags = curAcc?.tags || {}
+  const activeTags = TAGS.filter(t => curTags[t.key])
 
   return (
     <div className="inbox-layout">
       <div className="mail-list">
         <div className="mail-list-header">
           <select className="account-select" value={currentAccount} onChange={e => switchAccount(e.target.value)}>
-            {allAccounts.map(a => <option key={a} value={a}>{a}</option>)}
+            {allAccounts.map(a => {
+              const acc = accounts.find(x => x.email === a)
+              const tags = acc?.tags || {}
+              const active = TAGS.filter(t => tags[t.key])
+              const label = a === user.email ? 'admin' : a.split('@')[0]
+              const badges = active.map(t => t.label.charAt(0)).join('')
+              return <option key={a} value={a}>{label}{badges ? ` [${badges}]` : ''}</option>
+            })}
           </select>
-          <button className="refresh-btn" onClick={() => loadMail(true)} disabled={refreshing}>{refreshing ? '⟳' : '↻'} Refresh</button>
+          <button className="refresh-btn" onClick={() => loadMail(true)} disabled={refreshing}>{refreshing ? '⟳' : '↻'}</button>
+        </div>
+        {curAcc && activeTags.length > 0 && (
+          <div className="mail-account-tags">
+            {activeTags.map(t => (
+              <span key={t.key} className={`mini-tag tag-${curTags[t.key]}`}>
+                <TagIcon name={t.key} />{t.label}
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="mail-search-bar">
+          <input placeholder="Search emails..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         {loading ? <div className="empty">Loading...</div> :
          messages.length === 0 ? <div className="empty">No messages</div> :
-         messages.map(m => (
+         messages.filter(m => !search || m.subject?.toLowerCase().includes(search.toLowerCase()) || m.from?.toLowerCase().includes(search.toLowerCase())).map(m => (
           <div key={m.id} className={`mail-item ${selected === m.id ? 'active' : ''} ${!m.seen ? 'unread' : ''} ${m.spam ? 'spam' : ''}`} onClick={() => openMail(m)}>
             <div className="mail-from">{m.from.split('<')[0].trim() || m.from}{m.spam && <span className="spam-tag">SPAM</span>}</div>
             <div className="mail-subject">{m.subject}</div>
@@ -263,6 +287,17 @@ function AdminMail({ user }) {
 }
 
 // ==================== TAG ICONS (SVG) ====================
+const TAGS = [
+  { key: 'cursor', label: 'Cursor AI' },
+  { key: 'chatgpt', label: 'ChatGPT' },
+  { key: 'claude', label: 'Claude' },
+  { key: 'copilot', label: 'Copilot' },
+  { key: 'midjourney', label: 'Midjourney' },
+  { key: 'other', label: 'Other' },
+]
+const STATUS_CYCLE = [null, 'wait', 'ok', 'fail']
+const STATUS_DOT = { wait: '●', ok: '●', fail: '●' }
+
 function TagIcon({ name }) {
   const s = { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }
   switch (name) {
@@ -276,32 +311,16 @@ function TagIcon({ name }) {
   }
 }
 
-function AccountManager() {
-  const [accounts, setAccounts] = useState([])
+function AccountManager({ accounts, setAccounts, reload }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [genCount, setGenCount] = useState(1)
   const [msg, setMsg] = useState('')
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState('')
-
-  const TAGS = [
-    { key: 'cursor', label: 'Cursor AI' },
-    { key: 'chatgpt', label: 'ChatGPT' },
-    { key: 'claude', label: 'Claude' },
-    { key: 'copilot', label: 'Copilot' },
-    { key: 'midjourney', label: 'Midjourney' },
-    { key: 'other', label: 'Other' },
-  ]
-  const STATUS_CYCLE = [null, 'wait', 'ok', 'fail']
-  const STATUS_DOT = { wait: '●', ok: '●', fail: '●' }
-
-  const load = () => {
-    fetch(`${API}/admin/accounts`).then(r => r.json())
-      .then(data => setAccounts(data.accounts || []))
-  }
-
-  useEffect(load, [])
+  const [selected, setSelected] = useState(new Set())
+  const [search, setSearch] = useState('')
+  const [filterTag, setFilterTag] = useState('')
 
   const toggleTag = async (email, tagKey, currentTags) => {
     const current = currentTags[tagKey] || null
@@ -333,7 +352,7 @@ function AccountManager() {
     setUsername('')
     setPassword('')
     setLoading(false)
-    load()
+    reload()
   }
 
   const generate = async () => {
@@ -346,7 +365,7 @@ function AccountManager() {
     const data = await r.json()
     setMsg(`Generated ${data.created.length} accounts`)
     setLoading(false)
-    load()
+    reload()
   }
 
   const del = async (email) => {
@@ -356,21 +375,41 @@ function AccountManager() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email })
     })
-    load()
+    reload()
   }
 
-  const copy = (text) => {
+  const copy = (text, id) => {
     navigator.clipboard.writeText(text)
-    setCopied(text)
+    setCopied(id)
+    setTimeout(() => setCopied(''), 1500)
+  }
+
+  const toggleSelect = (email) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(email)) next.delete(email)
+      else next.add(email)
+      return next
+    })
+  }
+
+  const selectAll = () => {
+    if (selected.size === filtered.length) setSelected(new Set())
+    else setSelected(new Set(filtered.map(a => a.email)))
+  }
+
+  const copySelected = () => {
+    const text = accounts.filter(a => selected.has(a.email)).map(a => `${a.email}:${a.password}`).join('\n')
+    navigator.clipboard.writeText(text)
+    setCopied('selected')
     setTimeout(() => setCopied(''), 2000)
   }
 
-  const copyAll = () => {
-    const text = accounts.map(a => `${a.email}:${a.password}`).join('\n')
-    navigator.clipboard.writeText(text)
-    setCopied('all')
-    setTimeout(() => setCopied(''), 2000)
-  }
+  const filtered = accounts.filter(a => {
+    if (search && !a.email.toLowerCase().includes(search.toLowerCase())) return false
+    if (filterTag && !(a.tags || {})[filterTag]) return false
+    return true
+  })
 
   return (
     <div className="accounts-wrap">
@@ -392,17 +431,42 @@ function AccountManager() {
         </div>
 
         {msg && <div className="status-msg">{msg}</div>}
+
+        {selected.size > 0 && (
+          <div className="selection-actions">
+            <h3>Selected ({selected.size})</h3>
+            <button className="copy-selected-btn" onClick={copySelected}>
+              {copied === 'selected' ? 'Copied!' : `Copy ${selected.size} accounts`}
+            </button>
+            <button className="clear-sel-btn" onClick={() => setSelected(new Set())}>Clear selection</button>
+          </div>
+        )}
       </div>
 
       <div className="accounts-list">
-        <div className="accounts-header">
-          <h3>Accounts ({accounts.length})</h3>
-          {accounts.length > 0 && <button className="copy-all-btn" onClick={copyAll}>{copied === 'all' ? 'Copied!' : 'Copy All'}</button>}
+        <div className="accounts-toolbar">
+          <div className="accounts-toolbar-top">
+            <h3>Accounts ({filtered.length}{filtered.length !== accounts.length ? `/${accounts.length}` : ''})</h3>
+            <div className="toolbar-btns">
+              {filtered.length > 0 && <button className="toolbar-btn" onClick={selectAll}>{selected.size === filtered.length ? 'Deselect' : 'Select All'}</button>}
+              {accounts.length > 0 && <button className="toolbar-btn" onClick={() => copy(accounts.map(a => `${a.email}:${a.password}`).join('\n'), 'all')}>{copied === 'all' ? 'Copied!' : 'Copy All'}</button>}
+            </div>
+          </div>
+          <div className="accounts-toolbar-bottom">
+            <input className="search-input" placeholder="Search accounts..." value={search} onChange={e => setSearch(e.target.value)} />
+            <select className="filter-tag-select" value={filterTag} onChange={e => setFilterTag(e.target.value)}>
+              <option value="">All tags</option>
+              {TAGS.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+            </select>
+          </div>
         </div>
-        {accounts.map(a => (
-          <div key={a.email} className="account-item">
-            <div className="account-info">
-              <div className="account-top-row">
+        {filtered.map(a => (
+          <div key={a.email} className={`account-card ${selected.has(a.email) ? 'selected' : ''}`}>
+            <div className="account-card-check" onClick={() => toggleSelect(a.email)}>
+              <div className={`checkbox ${selected.has(a.email) ? 'checked' : ''}`}>{selected.has(a.email) ? '✓' : ''}</div>
+            </div>
+            <div className="account-card-body">
+              <div className="account-card-top">
                 <span className="account-email">{a.email}</span>
                 <span className="account-pass">{a.password}</span>
               </div>
@@ -413,7 +477,7 @@ function AccountManager() {
                     <button
                       key={t.key}
                       className={`tag-chip ${status ? 'tag-' + status : 'tag-off'}`}
-                      title={`${t.label}${status ? ' — ' + status : ''}`}
+                      title={`${t.label}${status ? ' — ' + status : ''}\nClick to cycle status`}
                       onClick={() => toggleTag(a.email, t.key, a.tags || {})}
                     >
                       <TagIcon name={t.key} />
@@ -424,9 +488,17 @@ function AccountManager() {
                 })}
               </div>
             </div>
-            <div className="account-actions">
-              <button className="copy-btn" onClick={() => copy(`${a.email}:${a.password}`)}>{copied === `${a.email}:${a.password}` ? 'OK' : 'Copy'}</button>
-              <button className="del-btn" onClick={() => del(a.email)}>Del</button>
+            <div className="account-card-actions">
+              <button className="act-btn copy-email" onClick={() => copy(a.email, 'e:' + a.email)} title="Copy email">
+                {copied === 'e:' + a.email ? '✓' : '📧'}
+              </button>
+              <button className="act-btn copy-pass" onClick={() => copy(a.password, 'p:' + a.email)} title="Copy password">
+                {copied === 'p:' + a.email ? '✓' : '🔑'}
+              </button>
+              <button className="act-btn copy-full" onClick={() => copy(`${a.email}:${a.password}`, 'f:' + a.email)} title="Copy email:password">
+                {copied === 'f:' + a.email ? '✓' : '📋'}
+              </button>
+              <button className="act-btn del-acc" onClick={() => del(a.email)} title="Delete account">🗑</button>
             </div>
           </div>
         ))}

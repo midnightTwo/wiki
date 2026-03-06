@@ -303,7 +303,7 @@ header {
 /* ============ ACCOUNTS ============ */
 .accounts-wrap {
   display: grid;
-  grid-template-columns: 340px 1fr;
+  grid-template-columns: 300px 1fr;
   height: calc(100vh - 52px);
 }
 
@@ -380,45 +380,175 @@ header {
   font-size: 0.85rem; color: var(--text-dim);
 }
 
+.selection-actions {
+  margin-top: 1.2rem;
+  padding: 1rem;
+  background: rgba(255,26,64,0.05);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  display: flex; flex-direction: column; gap: 0.5rem;
+}
+
+.selection-actions h3 { margin: 0; }
+
+.copy-selected-btn {
+  background: var(--accent) !important; color: #fff;
+}
+
+.clear-sel-btn {
+  background: transparent !important; color: var(--text-dim) !important;
+  border: 1px solid var(--border) !important;
+  font-size: 0.8rem; padding: 0.4rem !important;
+}
+.clear-sel-btn:hover { border-color: var(--accent) !important; color: var(--accent) !important; }
+
 /* ============ ACCOUNTS LIST ============ */
 .accounts-list {
-  overflow-y: auto; padding: 1rem;
+  overflow-y: auto;
   background: var(--bg-0);
+  display: flex; flex-direction: column;
 }
 
-.accounts-header {
+.accounts-toolbar {
+  padding: 0.8rem 1rem;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 5;
+}
+
+.accounts-toolbar-top {
   display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 0.8rem;
+  margin-bottom: 0.6rem;
 }
 
-.accounts-header h3 { color: var(--text); font-size: 1rem; margin: 0; }
+.accounts-toolbar-top h3 { color: var(--text); font-size: 0.95rem; margin: 0; }
 
-.copy-all-btn {
-  background: var(--bg-2); border: 1px solid var(--border);
-  color: var(--text-dim); padding: 0.3rem 0.8rem;
-  border-radius: var(--radius); cursor: pointer;
-  font-size: 0.8rem; transition: all 0.2s;
+.toolbar-btns { display: flex; gap: 0.4rem; }
+
+.toolbar-btn {
+  background: var(--bg-1); border: 1px solid var(--border);
+  color: var(--text-dim); padding: 0.25rem 0.65rem;
+  border-radius: 4px; cursor: pointer;
+  font-size: 0.75rem; transition: all 0.2s;
 }
-.copy-all-btn:hover { border-color: var(--accent); color: var(--accent); }
+.toolbar-btn:hover { border-color: var(--accent); color: var(--accent); }
 
-.account-item {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0.65rem 0.8rem;
+.accounts-toolbar-bottom {
+  display: flex; gap: 0.5rem;
+}
+
+.search-input {
+  flex: 1;
+  background: var(--bg-0); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 0.45rem 0.7rem;
+  color: var(--text); font-size: 0.85rem; outline: none;
+}
+.search-input:focus { border-color: var(--accent); box-shadow: 0 0 10px rgba(255,26,64,0.1); }
+
+.filter-tag-select {
+  background: var(--bg-0); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 0.45rem 0.5rem;
+  color: var(--text); font-size: 0.8rem; cursor: pointer; outline: none;
+}
+.filter-tag-select:focus { border-color: var(--accent); }
+
+/* ============ ACCOUNT CARD ============ */
+.account-card {
+  display: flex; align-items: stretch;
+  margin: 0.4rem 0.8rem;
   background: var(--bg-1);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  margin-bottom: 0.4rem;
-  transition: border-color 0.2s;
+  transition: all 0.2s;
+  overflow: hidden;
 }
-.account-item:hover { border-color: var(--border-hover); }
+.account-card:first-of-type { margin-top: 0.8rem; }
+.account-card:hover { border-color: var(--border-hover); }
+.account-card.selected { border-color: var(--accent); background: rgba(255,26,64,0.04); }
 
-.account-info { display: flex; flex-direction: column; gap: 0.3rem; overflow: hidden; flex: 1; min-width: 0; }
-.account-top-row { display: flex; align-items: center; gap: 0.75rem; }\n.account-email { font-size: 0.85rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.account-pass { font-size: 0.75rem; color: var(--text-dim); font-family: monospace; opacity: 0.7; }
+.account-card-check {
+  display: flex; align-items: center; justify-content: center;
+  width: 36px; min-width: 36px;
+  border-right: 1px solid var(--border);
+  cursor: pointer; transition: background 0.2s;
+}
+.account-card-check:hover { background: var(--bg-2); }
+
+.checkbox {
+  width: 16px; height: 16px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.65rem; color: var(--accent);
+  transition: all 0.15s;
+}
+.checkbox.checked { background: rgba(255,26,64,0.15); border-color: var(--accent); }
+
+.account-card-body {
+  flex: 1; padding: 0.55rem 0.7rem; overflow: hidden; min-width: 0;
+}
+
+.account-card-top {
+  display: flex; align-items: center; gap: 0.6rem;
+  margin-bottom: 0.3rem;
+}
+
+.account-email { font-size: 0.85rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.account-pass { font-size: 0.75rem; color: var(--text-dim); font-family: monospace; opacity: 0.7; flex-shrink: 0; }
 
 .account-tags {
-  display: flex; gap: 0.35rem; flex-wrap: wrap;
+  display: flex; gap: 0.3rem; flex-wrap: wrap;
 }
+
+/* ============ ACTION BUTTONS ============ */
+.account-card-actions {
+  display: flex; flex-direction: column;
+  border-left: 1px solid var(--border);
+}
+
+.act-btn {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  background: transparent; border: none;
+  color: var(--text-dim);
+  width: 34px; cursor: pointer;
+  font-size: 0.75rem;
+  transition: all 0.15s;
+  border-bottom: 1px solid var(--border);
+}
+.act-btn:last-child { border-bottom: none; }
+.act-btn:hover { background: var(--bg-2); }
+.act-btn.copy-email:hover { color: #4fc3f7; }
+.act-btn.copy-pass:hover { color: #ffd54f; }
+.act-btn.copy-full:hover { color: var(--accent); }
+.act-btn.del-acc:hover { color: var(--danger); background: rgba(255,68,102,0.08); }
+
+/* ============ MAIL SEARCH ============ */
+.mail-search-bar {
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-1);
+}
+.mail-search-bar input {
+  width: 100%;
+  background: var(--bg-0); border: 1px solid var(--border);
+  border-radius: 4px; padding: 0.35rem 0.6rem;
+  color: var(--text); font-size: 0.8rem; outline: none;
+}
+.mail-search-bar input:focus { border-color: var(--accent); }
+
+/* ============ MINI TAGS IN MAIL ============ */
+.mail-account-tags {
+  display: flex; gap: 0.3rem; flex-wrap: wrap;
+  padding: 0.35rem 0.8rem;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+}
+.mini-tag {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  padding: 0.15rem 0.45rem; border-radius: 4px;
+  font-size: 0.65rem; font-weight: 600;
+}
+.mini-tag svg { width: 10px; height: 10px; }
 
 .tag-chip {
   display: inline-flex; align-items: center; gap: 0.3rem;
@@ -443,17 +573,6 @@ header {
 .tag-wait { border-color: rgba(245,166,35,0.5); background: rgba(245,166,35,0.07); opacity: 1; color: #f5a623; }
 .tag-ok { border-color: rgba(52,199,89,0.5); background: rgba(52,199,89,0.07); opacity: 1; color: #34c759; }
 .tag-fail { border-color: rgba(255,59,48,0.5); background: rgba(255,59,48,0.07); opacity: 1; color: #ff3b30; }
-
-.account-actions { display: flex; gap: 0.3rem; flex-shrink: 0; }
-
-.copy-btn, .del-btn {
-  background: transparent; border: 1px solid var(--border);
-  color: var(--text-dim); padding: 0.25rem 0.55rem;
-  border-radius: 4px; cursor: pointer;
-  font-size: 0.75rem; transition: all 0.2s;
-}
-.copy-btn:hover { border-color: var(--accent); color: var(--accent); }
-.del-btn:hover { border-color: var(--danger); color: var(--danger); }
 
 /* ============ SCROLLBAR ============ */
 ::-webkit-scrollbar { width: 6px; }

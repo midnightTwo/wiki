@@ -3,7 +3,16 @@ import { useState, useEffect } from 'react'
 const API = '/api'
 
 function wrapHtml(html) {
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><base target="_blank"><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;line-height:1.6;color:#222;padding:12px;margin:0;word-break:break-word}a{color:#1a73e8}img{max-width:100%;height:auto}pre,code{white-space:pre-wrap;word-break:break-all}table{max-width:100%;border-collapse:collapse}td,th{padding:4px 8px}</style></head><body>${html}</body></html>`
+  const baseTag = '<base target="_blank">'
+  // If already a full HTML document, inject base tag only
+  if (/<html[\s>]/i.test(html)) {
+    if (/<head[\s>]/i.test(html)) {
+      return html.replace(/<head([^>]*)>/i, '<head$1>' + baseTag)
+    }
+    return html.replace(/<html([^>]*)>/i, '<html$1><head>' + baseTag + '</head>')
+  }
+  // Fragment — wrap with basic styles
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">${baseTag}<style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;line-height:1.6;color:#222;padding:12px;margin:0;word-break:break-word}a{color:#1a73e8}img{max-width:100%;height:auto}pre,code{white-space:pre-wrap;word-break:break-all}table{max-width:100%;border-collapse:collapse}td,th{padding:4px 8px}</style></head><body>${html}</body></html>`
 }
 
 function App() {
@@ -122,7 +131,7 @@ function Inbox({ user, onLogout }) {
                 <span>Date: {detail.date}</span>
               </div>
               {detail.body_type === 'html' ?
-                <iframe className="mail-body-frame" srcDoc={wrapHtml(detail.body)} sandbox="allow-same-origin allow-popups" /> :
+                <iframe className="mail-body-frame" srcDoc={wrapHtml(detail.body)} sandbox="allow-popups allow-popups-to-escape-sandbox" /> :
                 <pre className="mail-body-text">{detail.body}</pre>
               }
             </div>
@@ -243,7 +252,7 @@ function AdminMail({ user }) {
               <span>Date: {detail.date}</span>
             </div>
             {detail.body_type === 'html' ?
-              <iframe className="mail-body-frame" srcDoc={wrapHtml(detail.body)} sandbox="allow-same-origin allow-popups" /> :
+              <iframe className="mail-body-frame" srcDoc={wrapHtml(detail.body)} sandbox="allow-popups allow-popups-to-escape-sandbox" /> :
               <pre className="mail-body-text">{detail.body}</pre>
             }
           </div>

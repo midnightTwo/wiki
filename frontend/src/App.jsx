@@ -62,11 +62,20 @@ function Inbox({ user, onLogout }) {
   const [selected, setSelected] = useState(null)
   const [detail, setDetail] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+
+  const loadMail = (silent) => {
+    if (!silent) setLoading(true)
+    else setRefreshing(true)
+    fetch(`${API}/mail`).then(r => r.json())
+      .then(data => { setMessages(data.messages || []); setLoading(false); setRefreshing(false) })
+      .catch(() => { setLoading(false); setRefreshing(false) })
+  }
 
   useEffect(() => {
-    fetch(`${API}/mail`).then(r => r.json())
-      .then(data => { setMessages(data.messages || []); setLoading(false) })
-      .catch(() => setLoading(false))
+    loadMail(false)
+    const timer = setInterval(() => loadMail(true), 30000)
+    return () => clearInterval(timer)
   }, [])
 
   const openMail = async (msg) => {
@@ -75,6 +84,15 @@ function Inbox({ user, onLogout }) {
     const r = await fetch(`${API}/mail/${msg.id}`)
     const data = await r.json()
     setDetail(data)
+  }
+
+  const deleteMail = async (e, msg) => {
+    e.stopPropagation()
+    const pin = prompt('Enter PIN to delete:')
+    if (pin !== '228') { if (pin !== null) alert('Wrong PIN'); return }
+    await fetch(`${API}/mail/${msg.id}`, { method: 'DELETE' })
+    setMessages(prev => prev.filter(m => m.id !== msg.id))
+    if (selected === msg.id) { setSelected(null); setDetail(null) }
   }
 
   return (
@@ -86,14 +104,17 @@ function Inbox({ user, onLogout }) {
       </header>
       <div className="inbox-layout">
         <div className="mail-list">
-          <div className="mail-list-header">Inbox</div>
+          <div className="mail-list-header">
+            <span>Inbox</span>
+            <button className="refresh-btn" onClick={() => loadMail(true)} disabled={refreshing}>{refreshing ? '⟳' : '↻'} Refresh</button>
+          </div>
           {loading ? <div className="empty">Loading...</div> :
            messages.length === 0 ? <div className="empty">No messages</div> :
            messages.map(m => (
             <div key={m.id} className={`mail-item ${selected === m.id ? 'active' : ''} ${!m.seen ? 'unread' : ''} ${m.spam ? 'spam' : ''}`} onClick={() => openMail(m)}>
               <div className="mail-from">{m.from.split('<')[0].trim() || m.from}{m.spam && <span className="spam-tag">SPAM</span>}</div>
               <div className="mail-subject">{m.subject}</div>
-              <div className="mail-date">{m.date}</div>
+              <div className="mail-date">{m.date}<button className="del-mail-btn" onClick={(e) => deleteMail(e, m)}>✕</button></div>
             </div>
           ))}
         </div>
@@ -142,11 +163,20 @@ function AdminMail({ user }) {
   const [selected, setSelected] = useState(null)
   const [detail, setDetail] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+
+  const loadMail = (silent) => {
+    if (!silent) setLoading(true)
+    else setRefreshing(true)
+    fetch(`${API}/mail`).then(r => r.json())
+      .then(data => { setMessages(data.messages || []); setLoading(false); setRefreshing(false) })
+      .catch(() => { setLoading(false); setRefreshing(false) })
+  }
 
   useEffect(() => {
-    fetch(`${API}/mail`).then(r => r.json())
-      .then(data => { setMessages(data.messages || []); setLoading(false) })
-      .catch(() => setLoading(false))
+    loadMail(false)
+    const timer = setInterval(() => loadMail(true), 30000)
+    return () => clearInterval(timer)
   }, [])
 
   const openMail = async (msg) => {
@@ -157,17 +187,29 @@ function AdminMail({ user }) {
     setDetail(data)
   }
 
+  const deleteMail = async (e, msg) => {
+    e.stopPropagation()
+    const pin = prompt('Enter PIN to delete:')
+    if (pin !== '228') { if (pin !== null) alert('Wrong PIN'); return }
+    await fetch(`${API}/mail/${msg.id}`, { method: 'DELETE' })
+    setMessages(prev => prev.filter(m => m.id !== msg.id))
+    if (selected === msg.id) { setSelected(null); setDetail(null) }
+  }
+
   return (
     <div className="inbox-layout">
       <div className="mail-list">
-        <div className="mail-list-header">Admin Inbox</div>
+        <div className="mail-list-header">
+          <span>Admin Inbox</span>
+          <button className="refresh-btn" onClick={() => loadMail(true)} disabled={refreshing}>{refreshing ? '⟳' : '↻'} Refresh</button>
+        </div>
         {loading ? <div className="empty">Loading...</div> :
          messages.length === 0 ? <div className="empty">No messages</div> :
          messages.map(m => (
           <div key={m.id} className={`mail-item ${selected === m.id ? 'active' : ''} ${!m.seen ? 'unread' : ''} ${m.spam ? 'spam' : ''}`} onClick={() => openMail(m)}>
             <div className="mail-from">{m.from.split('<')[0].trim() || m.from}{m.spam && <span className="spam-tag">SPAM</span>}</div>
             <div className="mail-subject">{m.subject}</div>
-            <div className="mail-date">{m.date}</div>
+            <div className="mail-date">{m.date}<button className="del-mail-btn" onClick={(e) => deleteMail(e, m)}>✕</button></div>
           </div>
         ))}
       </div>

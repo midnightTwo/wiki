@@ -177,6 +177,45 @@ header {
   border-bottom: 1px solid var(--border);
   color: var(--text);
   background: var(--bg-2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.refresh-btn {
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.refresh-btn:hover { background: var(--accent); color: #fff; }
+.refresh-btn:disabled { opacity: 0.5; cursor: default; }
+
+.del-mail-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  cursor: pointer;
+  margin-left: 0.5rem;
+  padding: 0.15rem 0.35rem;
+  border-radius: 3px;
+  opacity: 0;
+  transition: all 0.15s;
+}
+.mail-item:hover .del-mail-btn { opacity: 1; }
+.del-mail-btn:hover { color: var(--accent); background: rgba(255,26,64,0.15); }
+
+.mail-date {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.75rem; color: var(--text-dim);
+  margin-top: 0.15rem; opacity: 0.7;
 }
 
 .mail-item {
@@ -207,10 +246,7 @@ header {
   margin-top: 0.15rem;
 }
 
-.mail-date {
-  font-size: 0.75rem; color: var(--text-dim);
-  margin-top: 0.15rem; opacity: 0.7;
-}
+
 
 .empty {
   display: flex; align-items: center; justify-content: center;

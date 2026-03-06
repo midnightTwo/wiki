@@ -255,6 +255,29 @@ def api_mail_detail(mail_id):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/mail/<path:mail_id>', methods=['DELETE'])
+@login_required
+def api_mail_delete(mail_id):
+    try:
+        parts = mail_id.split(':')
+        folder = parts[0]
+        mid = parts[1]
+
+        try:
+            imap = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT)
+        except Exception:
+            imap = imaplib.IMAP4(IMAP_HOST, 143)
+        imap.login(session['user'], session['password'])
+        imap.select(folder)
+        imap.store(mid.encode(), '+FLAGS', '\\Deleted')
+        imap.expunge()
+        imap.logout()
+
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # --- Admin: Account Management ---
 
 def mailu_command(cmd):

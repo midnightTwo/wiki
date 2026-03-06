@@ -249,6 +249,20 @@ function AdminMail({ user }) {
   )
 }
 
+// ==================== TAG ICONS (SVG) ====================
+function TagIcon({ name }) {
+  const s = { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }
+  switch (name) {
+    case 'cursor': return <svg {...s}><path d='M4 4l7.07 17 2.51-7.39L21 11.07z'/><path d='M13.58 13.58L21 21'/></svg>
+    case 'chatgpt': return <svg {...s}><circle cx='12' cy='12' r='10'/><path d='M12 6v2m0 8v2M6 12h2m8 0h2'/><circle cx='12' cy='12' r='3'/></svg>
+    case 'claude': return <svg {...s}><path d='M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z'/><path d='M8 12h8M12 8v8' stroke='currentColor' strokeWidth='2.5'/></svg>
+    case 'copilot': return <svg {...s}><path d='M17.8 19.2L16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5L2 10.3c-.2.5 0 1 .5 1.2l4.5 2 2.5 2.5 2 4.5c.2.5.7.7 1.2.5l3.6-1.7c.4-.2.6-.6.5-1.1z'/></svg>
+    case 'midjourney': return <svg {...s}><polygon points='12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2'/></svg>
+    case 'other': return <svg {...s}><circle cx='12' cy='12' r='1'/><circle cx='19' cy='12' r='1'/><circle cx='5' cy='12' r='1'/></svg>
+    default: return null
+  }
+}
+
 function AccountManager() {
   const [accounts, setAccounts] = useState([])
   const [username, setUsername] = useState('')
@@ -259,15 +273,15 @@ function AccountManager() {
   const [copied, setCopied] = useState('')
 
   const TAGS = [
-    { key: 'cursor', label: 'Cursor AI', icon: '⌨️' },
-    { key: 'chatgpt', label: 'ChatGPT', icon: '🤖' },
-    { key: 'claude', label: 'Claude', icon: '🧠' },
-    { key: 'copilot', label: 'Copilot', icon: '✈️' },
-    { key: 'midjourney', label: 'Midjourney', icon: '🎨' },
-    { key: 'other', label: 'Other', icon: '📌' },
+    { key: 'cursor', label: 'Cursor AI' },
+    { key: 'chatgpt', label: 'ChatGPT' },
+    { key: 'claude', label: 'Claude' },
+    { key: 'copilot', label: 'Copilot' },
+    { key: 'midjourney', label: 'Midjourney' },
+    { key: 'other', label: 'Other' },
   ]
   const STATUS_CYCLE = [null, 'wait', 'ok', 'fail']
-  const STATUS_ICON = { wait: '⏳', ok: '✅', fail: '❌' }
+  const STATUS_DOT = { wait: '●', ok: '●', fail: '●' }
 
   const load = () => {
     fetch(`${API}/admin/accounts`).then(r => r.json())
@@ -375,20 +389,23 @@ function AccountManager() {
         {accounts.map(a => (
           <div key={a.email} className="account-item">
             <div className="account-info">
-              <span className="account-email">{a.email}</span>
-              <span className="account-pass">{a.password}</span>
+              <div className="account-top-row">
+                <span className="account-email">{a.email}</span>
+                <span className="account-pass">{a.password}</span>
+              </div>
               <div className="account-tags">
                 {TAGS.map(t => {
                   const status = (a.tags || {})[t.key] || null
                   return (
                     <button
                       key={t.key}
-                      className={`tag-btn ${status ? 'tag-' + status : 'tag-off'}`}
+                      className={`tag-chip ${status ? 'tag-' + status : 'tag-off'}`}
                       title={`${t.label}${status ? ' — ' + status : ''}`}
                       onClick={() => toggleTag(a.email, t.key, a.tags || {})}
                     >
-                      <span className="tag-icon">{t.icon}</span>
-                      {status && <span className="tag-status">{STATUS_ICON[status]}</span>}
+                      <TagIcon name={t.key} />
+                      <span className="tag-label">{t.label}</span>
+                      {status && <span className={`tag-dot tag-dot-${status}`}>{STATUS_DOT[status]}</span>}
                     </button>
                   )
                 })}

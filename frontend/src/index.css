@@ -455,20 +455,19 @@ header {
 /* ============ ACCOUNT CARD ============ */
 .account-card {
   display: flex; flex-direction: column;
-  margin: 0.5rem 1rem;
-  background: var(--bg-1);
+  margin: 8px 12px;
+  background: var(--bg-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 10px;
   transition: all 0.2s;
-  overflow: hidden;
 }
-.account-card:first-of-type { margin-top: 1rem; }
-.account-card:hover { border-color: var(--border-hover); }
-.account-card.selected { border-color: var(--accent); background: rgba(255,26,64,0.04); }
+.account-card:first-of-type { margin-top: 12px; }
+.account-card:hover { border-color: var(--accent-dim); box-shadow: 0 0 12px rgba(255,26,64,0.1); }
+.account-card.selected { border-color: var(--accent); background: rgba(255,26,64,0.08); box-shadow: 0 0 15px rgba(255,26,64,0.15); }
 
 .account-card-header {
-  display: flex; align-items: center; gap: 0.5rem;
-  padding: 0.7rem 0.8rem;
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px;
 }
 
 .account-card-check {
@@ -476,52 +475,54 @@ header {
 }
 
 .checkbox {
-  width: 18px; height: 18px;
-  border: 1.5px solid var(--border);
+  width: 20px; height: 20px;
+  border: 2px solid var(--text-dim);
   border-radius: 4px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 0.7rem; color: var(--accent);
+  font-size: 13px; color: var(--accent); font-weight: 700;
   transition: all 0.15s;
 }
-.checkbox:hover { border-color: var(--accent-dim); }
-.checkbox.checked { background: rgba(255,26,64,0.2); border-color: var(--accent); }
+.checkbox:hover { border-color: var(--accent); }
+.checkbox.checked { background: var(--accent); border-color: var(--accent); color: #fff; }
 
 .account-card-info {
   flex: 1; min-width: 0;
-  display: flex; align-items: center; gap: 0.8rem;
+  display: flex; align-items: center; gap: 12px;
 }
 
 .account-email {
-  font-size: 0.9rem; color: var(--text); font-weight: 500;
+  font-size: 15px; color: #fff; font-weight: 600;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .account-pass {
-  font-size: 0.8rem; color: var(--text-dim); font-family: 'Consolas', monospace;
-  opacity: 0.8; flex-shrink: 0;
+  font-size: 13px; color: var(--accent); font-family: 'Consolas', 'Courier New', monospace;
+  font-weight: 500; flex-shrink: 0;
 }
 
 .account-card-tags {
-  display: flex; gap: 0.35rem; flex-wrap: wrap;
-  padding: 0 0.8rem 0.65rem;
+  display: flex; gap: 6px; flex-wrap: wrap;
+  padding: 0 14px 10px;
 }
 
 /* ============ ACTION BUTTONS ============ */
 .account-card-actions {
-  display: flex; gap: 0.3rem; flex-shrink: 0; margin-left: auto;
+  display: flex; gap: 4px; flex-shrink: 0; margin-left: auto;
 }
 
 .act-btn {
-  background: var(--bg-2); border: 1px solid var(--border);
-  color: var(--text-dim);
-  padding: 0.3rem 0.55rem;
-  border-radius: 4px; cursor: pointer;
-  font-size: 0.72rem; font-weight: 500;
+  background: var(--bg-3); border: 1px solid var(--border-hover);
+  color: var(--text);
+  padding: 5px 10px;
+  border-radius: 6px; cursor: pointer;
+  font-size: 12px; font-weight: 600;
   transition: all 0.15s;
+  white-space: nowrap;
 }
-.act-btn:hover { border-color: var(--accent-dim); color: var(--text); background: var(--bg-3); }
-.act-btn.accent { color: var(--accent); border-color: rgba(255,26,64,0.3); }
-.act-btn.accent:hover { background: rgba(255,26,64,0.1); border-color: var(--accent); }
-.act-btn.danger:hover { border-color: var(--danger); color: var(--danger); background: rgba(255,68,102,0.08); }
+.act-btn:hover { border-color: var(--accent); color: #fff; background: rgba(255,26,64,0.15); }
+.act-btn.accent { color: var(--accent); border-color: var(--accent); background: rgba(255,26,64,0.1); }
+.act-btn.accent:hover { background: rgba(255,26,64,0.25); color: #fff; }
+.act-btn.danger { color: var(--text-dim); }
+.act-btn.danger:hover { border-color: var(--danger); color: var(--danger); background: rgba(255,68,102,0.12); }
 
 /* ============ MAIL SEARCH ============ */
 .mail-search-bar {
@@ -552,21 +553,24 @@ header {
 .mini-tag svg { width: 10px; height: 10px; }
 
 .tag-chip {
-  display: inline-flex; align-items: center; gap: 0.3rem;
-  background: var(--bg-2); border: 1px solid var(--border);
-  border-radius: 6px; padding: 0.2rem 0.5rem;
-  cursor: pointer; font-size: 0.7rem; color: var(--text-dim);
-  transition: all 0.2s; line-height: 1;
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--bg-3); border: 1px solid var(--border-hover);
+  border-radius: 6px; padding: 3px 8px;
+  cursor: pointer; font-size: 11px; color: var(--text);
+  transition: all 0.2s; line-height: 1.2;
 }
-.tag-chip svg { flex-shrink: 0; }
-.tag-chip:hover { border-color: var(--accent-dim); color: var(--text); background: var(--bg-3); }
+.tag-chip svg { flex-shrink: 0; width: 12px; height: 12px; }
+.tag-chip:hover { border-color: var(--accent-dim); color: #fff; background: rgba(255,26,64,0.1); }
 
 .tag-label { white-space: nowrap; }
 
-.tag-dot { font-size: 0.5rem; margin-left: 0.1rem; }
+.tag-dot { font-size: 8px; margin-left: 2px; }
 .tag-dot-wait { color: #f5a623; }
 .tag-dot-ok { color: #34c759; }
 .tag-dot-fail { color: #ff3b30; }
+
+.tag-off { opacity: 0.35; }
+.tag-off:hover { opacity: 0.7; }
 
 .tag-off { opacity: 0.3; }
 .tag-off:hover { opacity: 0.65; }

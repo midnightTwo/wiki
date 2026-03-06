@@ -86,15 +86,6 @@ function Inbox({ user, onLogout }) {
     setDetail(data)
   }
 
-  const deleteMail = async (e, msg) => {
-    e.stopPropagation()
-    const pin = prompt('Enter PIN to delete:')
-    if (pin !== '228') { if (pin !== null) alert('Wrong PIN'); return }
-    await fetch(`${API}/mail/${msg.id}`, { method: 'DELETE' })
-    setMessages(prev => prev.filter(m => m.id !== msg.id))
-    if (selected === msg.id) { setSelected(null); setDetail(null) }
-  }
-
   return (
     <div className="app-wrap">
       <header>
@@ -114,7 +105,7 @@ function Inbox({ user, onLogout }) {
             <div key={m.id} className={`mail-item ${selected === m.id ? 'active' : ''} ${!m.seen ? 'unread' : ''} ${m.spam ? 'spam' : ''}`} onClick={() => openMail(m)}>
               <div className="mail-from">{m.from.split('<')[0].trim() || m.from}{m.spam && <span className="spam-tag">SPAM</span>}</div>
               <div className="mail-subject">{m.subject}</div>
-              <div className="mail-date">{m.date}<button className="del-mail-btn" onClick={(e) => deleteMail(e, m)}>✕</button></div>
+              <div className="mail-date">{m.date}</div>
             </div>
           ))}
         </div>
@@ -159,16 +150,26 @@ function Admin({ user, onLogout }) {
 }
 
 function AdminMail({ user }) {
+  const [accounts, setAccounts] = useState([])
+  const [currentAccount, setCurrentAccount] = useState(user.email)
   const [messages, setMessages] = useState([])
   const [selected, setSelected] = useState(null)
   const [detail, setDetail] = useState(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
+  useEffect(() => {
+    fetch(`${API}/admin/accounts`).then(r => r.json())
+      .then(data => setAccounts(data.accounts || []))
+  }, [])
+
   const loadMail = (silent) => {
     if (!silent) setLoading(true)
     else setRefreshing(true)
-    fetch(`${API}/mail`).then(r => r.json())
+    const url = currentAccount === user.email
+      ? `${API}/mail`
+      : `${API}/admin/mail?account=${encodeURIComponent(currentAccount)}`
+    fetch(url).then(r => r.json())
       .then(data => { setMessages(data.messages || []); setLoading(false); setRefreshing(false) })
       .catch(() => { setLoading(false); setRefreshing(false) })
   }
@@ -177,30 +178,46 @@ function AdminMail({ user }) {
     loadMail(false)
     const timer = setInterval(() => loadMail(true), 30000)
     return () => clearInterval(timer)
-  }, [])
+  }, [currentAccount])
+
+  const switchAccount = (acc) => {
+    setCurrentAccount(acc)
+    setSelected(null)
+    setDetail(null)
+    setMessages([])
+  }
 
   const openMail = async (msg) => {
     setSelected(msg.id)
     setDetail(null)
-    const r = await fetch(`${API}/mail/${msg.id}`)
+    const url = currentAccount === user.email
+      ? `${API}/mail/${msg.id}`
+      : `${API}/admin/mail/${msg.id}?account=${encodeURIComponent(currentAccount)}`
+    const r = await fetch(url)
     const data = await r.json()
     setDetail(data)
   }
 
   const deleteMail = async (e, msg) => {
     e.stopPropagation()
-    const pin = prompt('Enter PIN to delete:')
-    if (pin !== '228') { if (pin !== null) alert('Wrong PIN'); return }
-    await fetch(`${API}/mail/${msg.id}`, { method: 'DELETE' })
+    if (!confirm('Delete this email?')) return
+    const url = currentAccount === user.email
+      ? `${API}/mail/${msg.id}`
+      : `${API}/admin/mail/${msg.id}?account=${encodeURIComponent(currentAccount)}`
+    await fetch(url, { method: 'DELETE' })
     setMessages(prev => prev.filter(m => m.id !== msg.id))
     if (selected === msg.id) { setSelected(null); setDetail(null) }
   }
+
+  const allAccounts = [user.email, ...accounts.map(a => a.email)]
 
   return (
     <div className="inbox-layout">
       <div className="mail-list">
         <div className="mail-list-header">
-          <span>Admin Inbox</span>
+          <select className="account-select" value={currentAccount} onChange={e => switchAccount(e.target.value)}>
+            {allAccounts.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
           <button className="refresh-btn" onClick={() => loadMail(true)} disabled={refreshing}>{refreshing ? '⟳' : '↻'} Refresh</button>
         </div>
         {loading ? <div className="empty">Loading...</div> :

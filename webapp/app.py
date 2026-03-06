@@ -163,15 +163,74 @@ def get_email_body(msg):
     return '', 'text'
 
 
+@app.route('/api/admin/mail')
+@admin_required
+def api_admin_mail():
+    """Admin reads any user's mailbox"""
+    account = request.args.get('account', '').strip()
+    if not account:
+        return jsonify({'error': 'account param required'}), 400
+    db = get_db()
+    row = db.execute('SELECT password FROM generated_accounts WHERE email = ?', (account,)).fetchone()
+    db.close()
+    if account == f'admin@{DOMAIN}':
+        acc_password = session['password']
+    elif row:
+        acc_password = row['password']
+    else:
+        return jsonify({'error': 'Account not found'}), 404
+    return _fetch_mail(account, acc_password)
+
+
+@app.route('/api/admin/mail/<path:mail_id>')
+@admin_required
+def api_admin_mail_detail(mail_id):
+    account = request.args.get('account', '').strip()
+    if not account:
+        return jsonify({'error': 'account param required'}), 400
+    db = get_db()
+    row = db.execute('SELECT password FROM generated_accounts WHERE email = ?', (account,)).fetchone()
+    db.close()
+    if account == f'admin@{DOMAIN}':
+        acc_password = session['password']
+    elif row:
+        acc_password = row['password']
+    else:
+        return jsonify({'error': 'Account not found'}), 404
+    return _fetch_mail_detail(mail_id, account, acc_password)
+
+
+@app.route('/api/admin/mail/<path:mail_id>', methods=['DELETE'])
+@admin_required
+def api_admin_mail_delete(mail_id):
+    account = request.args.get('account', '').strip()
+    if not account:
+        return jsonify({'error': 'account param required'}), 400
+    db = get_db()
+    row = db.execute('SELECT password FROM generated_accounts WHERE email = ?', (account,)).fetchone()
+    db.close()
+    if account == f'admin@{DOMAIN}':
+        acc_password = session['password']
+    elif row:
+        acc_password = row['password']
+    else:
+        return jsonify({'error': 'Account not found'}), 404
+    return _delete_mail(mail_id, account, acc_password)
+
+
 @app.route('/api/mail')
 @login_required
 def api_mail():
+    return _fetch_mail(session['user'], session['password'])
+
+
+def _fetch_mail(user_email, user_password):
     try:
         try:
             imap = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT)
         except Exception:
             imap = imaplib.IMAP4(IMAP_HOST, 143)
-        imap.login(session['user'], session['password'])
+        imap.login(user_email, user_password)
 
         messages = []
 
@@ -224,6 +283,10 @@ def api_mail():
 @app.route('/api/mail/<path:mail_id>')
 @login_required
 def api_mail_detail(mail_id):
+    return _fetch_mail_detail(mail_id, session['user'], session['password'])
+
+
+def _fetch_mail_detail(mail_id, user_email, user_password):
     try:
         parts = mail_id.split(':')
         folder = parts[0]
@@ -233,7 +296,7 @@ def api_mail_detail(mail_id):
             imap = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT)
         except Exception:
             imap = imaplib.IMAP4(IMAP_HOST, 143)
-        imap.login(session['user'], session['password'])
+        imap.login(user_email, user_password)
         imap.select(folder)
         _, msg_data = imap.fetch(mid.encode(), '(RFC822)')
         raw = msg_data[0][1]
@@ -255,9 +318,7 @@ def api_mail_detail(mail_id):
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/mail/<path:mail_id>', methods=['DELETE'])
-@login_required
-def api_mail_delete(mail_id):
+def _delete_mail(mail_id, user_email, user_password):
     try:
         parts = mail_id.split(':')
         folder = parts[0]
@@ -267,7 +328,7 @@ def api_mail_delete(mail_id):
             imap = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT)
         except Exception:
             imap = imaplib.IMAP4(IMAP_HOST, 143)
-        imap.login(session['user'], session['password'])
+        imap.login(user_email, user_password)
         imap.select(folder)
         imap.store(mid.encode(), '+FLAGS', '\\Deleted')
         imap.expunge()

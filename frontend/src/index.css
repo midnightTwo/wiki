@@ -195,6 +195,18 @@ header {
 .refresh-btn:hover { background: var(--accent); color: #fff; }
 .refresh-btn:disabled { opacity: 0.5; cursor: default; }
 
+.account-select {
+  background: var(--bg-1);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 0.25rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  max-width: 180px;
+  cursor: pointer;
+}
+.account-select:focus { border-color: var(--accent); outline: none; }
+
 .del-mail-btn {
   background: transparent;
   border: none;

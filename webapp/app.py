@@ -15,7 +15,7 @@ app = Flask(__name__, static_folder='../frontend/dist', static_url_path='')
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 
 DOMAIN = os.environ.get('MAIL_DOMAIN', 'kmr-mail.online')
-IMAP_HOST = os.environ.get('IMAP_HOST', '192.168.203.8')
+IMAP_HOST = os.environ.get('IMAP_HOST', 'imap')
 IMAP_PORT = int(os.environ.get('IMAP_PORT', '993'))
 ADMIN_CONTAINER = os.environ.get('ADMIN_CONTAINER', 'wiki-admin-1')
 DB_PATH = os.environ.get('DB_PATH', '/data/panel.db')

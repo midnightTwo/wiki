@@ -35,6 +35,7 @@ WORKDIR /app/webapp
 
 ENV FLASK_APP=app.py
 ENV MAIL_DOMAIN=kmr-mail.online
+ENV IMAP_HOST=imap
 ENV DB_PATH=/data/panel.db
 
 EXPOSE 8000

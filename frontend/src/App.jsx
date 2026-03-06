@@ -2,6 +2,20 @@ import { useState, useEffect } from 'react'
 
 const API = '/api'
 
+function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(text)
+  }
+  const ta = document.createElement('textarea')
+  ta.value = text
+  ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px'
+  document.body.appendChild(ta)
+  ta.select()
+  document.execCommand('copy')
+  document.body.removeChild(ta)
+  return Promise.resolve()
+}
+
 function wrapHtml(html) {
   const baseTag = '<base target="_blank">'
   // If already a full HTML document, inject base tag only
@@ -379,7 +393,7 @@ function AccountManager({ accounts, setAccounts, reload }) {
   }
 
   const copy = (text, id) => {
-    navigator.clipboard.writeText(text)
+    copyText(text)
     setCopied(id)
     setTimeout(() => setCopied(''), 1500)
   }
@@ -400,7 +414,7 @@ function AccountManager({ accounts, setAccounts, reload }) {
 
   const copySelected = () => {
     const text = accounts.filter(a => selected.has(a.email)).map(a => `${a.email}:${a.password}`).join('\n')
-    navigator.clipboard.writeText(text)
+    copyText(text)
     setCopied('selected')
     setTimeout(() => setCopied(''), 2000)
   }

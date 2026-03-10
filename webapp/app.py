@@ -6,9 +6,14 @@ import email.header
 import email.utils
 import sqlite3
 import secrets
+import random
 import subprocess
+import threading
+import time
+import uuid
 from datetime import datetime
 from functools import wraps
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, request, jsonify, send_from_directory, session
 
 app = Flask(__name__, static_folder='../frontend/dist', static_url_path='')
@@ -21,6 +26,97 @@ IMAP_PORT = int(os.environ.get('IMAP_PORT', '993'))
 ADMIN_CONTAINER = os.environ.get('ADMIN_CONTAINER', 'wiki-admin-1')
 DB_PATH = os.environ.get('DB_PATH', '/data/panel.db')
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'himarra228')
+
+# Worker pool for background jobs (limited to avoid overloading server)
+worker_pool = ThreadPoolExecutor(max_workers=3)
+
+# Background jobs tracking
+jobs = {}  # job_id -> {status, total, done, created, errors}
+jobs_lock = threading.Lock()
+
+
+# --- Realistic Username Generator ---
+
+_FIRST_NAMES = [
+    'alex', 'ivan', 'maks', 'denis', 'artem', 'nikita', 'dima', 'kirill',
+    'roma', 'vlad', 'andrey', 'sergey', 'pavel', 'oleg', 'igor', 'sasha',
+    'kolya', 'vanya', 'kostya', 'misha', 'petya', 'vitya', 'zhenya', 'grisha',
+    'timur', 'ruslan', 'danil', 'egor', 'ilya', 'mark', 'lev', 'gleb',
+    'fedor', 'matvey', 'stepan', 'bogdan', 'yaroslav', 'dmitry', 'anton',
+    'maxim', 'valera', 'slava', 'tolik', 'gena', 'borya', 'yura', 'lyosha',
+    'tema', 'arseniy', 'savva', 'platon', 'mir', 'leon', 'alan', 'eldar',
+    'tima', 'amir', 'robert', 'adam', 'david', 'renat', 'kamil', 'bulat',
+    'arina', 'masha', 'dasha', 'katya', 'nastya', 'sveta', 'olya', 'lena',
+    'tanya', 'anya', 'polina', 'alina', 'vika', 'marina', 'liza', 'sonya',
+    'kira', 'vera', 'nika', 'milana', 'sofiya', 'ulyana', 'valeriya', 'ksenia',
+    'eva', 'diana', 'alisa', 'rita', 'ira', 'natasha', 'galya', 'nadya',
+    'yulia', 'ksusha', 'zina', 'lara', 'nina', 'alla', 'emma', 'maya',
+    'zlata', 'tamara', 'rosa', 'stella', 'mila', 'nelli', 'angelina', 'karina',
+]
+
+_LAST_PARTS = [
+    'ov', 'ev', 'in', 'ko', 'uk', 'enko', 'ova', 'eva', 'ina', 'sky',
+    'nov', 'kov', 'lev', 'shin', 'kin', 'lin', 'min', 'lov', 'nik', 'chuk',
+    'ovich', 'enko', 'yuk', 'ak', 'an', 'ets', 'ich', 'tsov', 'chenk', 'skiy',
+    'zon', 'man', 'berg', 'stein', 'feld', 'baum', 'ler', 'ner', 'son', 'sen',
+]
+
+_WORDS = [
+    'pro', 'dev', 'top', 'best', 'cool', 'real', 'fast', 'smart', 'lucky', 'true',
+    'fire', 'dark', 'wild', 'ice', 'neo', 'max', 'red', 'blue', 'black', 'gold',
+    'sun', 'star', 'sky', 'wolf', 'fox', 'cat', 'lion', 'bear', 'hawk', 'tiger',
+    'play', 'win', 'run', 'go', 'fly', 'live', 'rock', 'jazz', 'beat', 'vibe',
+]
+
+
+def generate_realistic_username():
+    """Generate a realistic-looking username with 100k+ unique combinations."""
+    pattern = random.randint(1, 10)
+
+    name = random.choice(_FIRST_NAMES)
+    last = random.choice(_LAST_PARTS)
+    word = random.choice(_WORDS)
+    num = random.randint(0, 999)
+
+    if pattern == 1:
+        # makskov7
+        return f"{name}{last}{random.randint(0, 9)}"
+    elif pattern == 2:
+        # ivan.litvin
+        name2 = random.choice(_FIRST_NAMES)
+        sep = random.choice(['.', '_', ''])
+        return f"{name}{sep}{name2}"
+    elif pattern == 3:
+        # artempro99
+        return f"{name}{word}{random.randint(1, 99)}"
+    elif pattern == 4:
+        # d.komarenko
+        return f"{name[0]}{random.choice(['.', '_'])}{name}{last}"
+    elif pattern == 5:
+        # nikita2003
+        return f"{name}{random.randint(1990, 2006)}"
+    elif pattern == 6:
+        # smartigor
+        return f"{word}{name}"
+    elif pattern == 7:
+        # maks_ov95
+        return f"{name}_{last}{random.randint(10, 99)}"
+    elif pattern == 8:
+        # ivanlis9
+        short_last = random.choice(_LAST_PARTS)[:3]
+        return f"{name}{short_last}{random.randint(0, 9)}"
+    elif pattern == 9:
+        # xd.misha.fire
+        prefix = random.choice(['xd', 'mr', 'xx', 'the', 'ya', 'im'])
+        return f"{prefix}.{name}.{word}"
+    else:
+        # prodartem
+        return f"{word}{name}"
+
+
+def generate_realistic_password():
+    """Generate a strong but memorable-looking password."""
+    return secrets.token_urlsafe(12)
 
 
 # --- Database ---
@@ -444,40 +540,140 @@ def api_admin_create():
     return jsonify({'ok': True, 'email': email_addr, 'password': password})
 
 
+def _create_single_account(username, domain, password):
+    """Create one account in Mailu and return (email, password) or None on failure."""
+    email_addr = f'{username}@{domain}'
+    result = mailu_command(['user', username, domain, password])
+    if 'exists' in result.lower():
+        return None
+    return (email_addr, password)
+
+
+def _run_generate_job(job_id, count, domain):
+    """Background worker: generate accounts in small parallel batches."""
+    BATCH = 5  # parallel docker exec at once (don't overload Mailu)
+    accounts_to_create = []
+    for _ in range(count):
+        for _attempt in range(5):
+            username = generate_realistic_username()
+            # ensure no duplicate in this batch
+            if username not in [u for u, _ in accounts_to_create]:
+                break
+        password = generate_realistic_password()
+        accounts_to_create.append((username, password))
+
+    created = []
+    errors = 0
+
+    for i in range(0, len(accounts_to_create), BATCH):
+        batch = accounts_to_create[i:i+BATCH]
+        futures = {}
+        with ThreadPoolExecutor(max_workers=BATCH) as batch_pool:
+            for username, password in batch:
+                f = batch_pool.submit(_create_single_account, username, domain, password)
+                futures[f] = (username, password)
+
+            for f in as_completed(futures):
+                try:
+                    result = f.result()
+                    if result:
+                        created.append({'email': result[0], 'password': result[1]})
+                    else:
+                        errors += 1
+                except Exception:
+                    errors += 1
+
+        # Save completed batch to DB
+        if created:
+            db = get_db()
+            for acc in created[len(created) - len([f for f in futures if futures[f]])::]:
+                try:
+                    db.execute(
+                        'INSERT INTO generated_accounts (email, password) VALUES (?, ?)',
+                        (acc['email'], acc['password'])
+                    )
+                except sqlite3.IntegrityError:
+                    pass
+            db.commit()
+            db.close()
+
+        with jobs_lock:
+            jobs[job_id]['done'] = min(i + BATCH, count)
+            jobs[job_id]['created'] = created[:]
+
+    # Save all to DB in one final pass (idempotent due to UNIQUE constraint)
+    db = get_db()
+    for acc in created:
+        try:
+            db.execute(
+                'INSERT OR IGNORE INTO generated_accounts (email, password) VALUES (?, ?)',
+                (acc['email'], acc['password'])
+            )
+        except Exception:
+            pass
+    db.commit()
+    db.close()
+
+    with jobs_lock:
+        jobs[job_id]['status'] = 'done'
+        jobs[job_id]['done'] = count
+        jobs[job_id]['created'] = created
+        jobs[job_id]['errors'] = errors
+
+
 @app.route('/api/admin/generate', methods=['POST'])
 @admin_required
 def api_admin_generate():
     data = request.get_json() or {}
-    count = min(int(data.get('count', 1)), 50)
+    count = min(int(data.get('count', 1)), 200)
     domain = (data.get('domain') or '').strip() or DOMAIN
 
     if domain not in DOMAINS:
         return jsonify({'error': f'Domain {domain} not allowed'}), 400
 
-    created = []
-    for _ in range(count):
-        username = secrets.token_hex(4)
-        password = secrets.token_urlsafe(10)
-        email_addr = f'{username}@{domain}'
+    # Small batches (<=5) — run synchronously for instant response
+    if count <= 5:
+        created = []
+        for _ in range(count):
+            username = generate_realistic_username()
+            password = generate_realistic_password()
+            result = _create_single_account(username, domain, password)
+            if result:
+                db = get_db()
+                try:
+                    db.execute(
+                        'INSERT OR IGNORE INTO generated_accounts (email, password) VALUES (?, ?)',
+                        (result[0], result[1])
+                    )
+                    db.commit()
+                except Exception:
+                    pass
+                db.close()
+                created.append({'email': result[0], 'password': result[1]})
+        return jsonify({'ok': True, 'created': created})
 
-        result = mailu_command(['user', username, domain, password])
-        if 'exists' in result.lower():
-            continue
+    # Large batches — run in background
+    job_id = str(uuid.uuid4())[:8]
+    with jobs_lock:
+        jobs[job_id] = {
+            'status': 'running',
+            'total': count,
+            'done': 0,
+            'created': [],
+            'errors': 0
+        }
+    worker_pool.submit(_run_generate_job, job_id, count, domain)
+    return jsonify({'ok': True, 'job_id': job_id})
 
-        db = get_db()
-        try:
-            db.execute(
-                'INSERT INTO generated_accounts (email, password) VALUES (?, ?)',
-                (email_addr, password)
-            )
-            db.commit()
-        except sqlite3.IntegrityError:
-            pass
-        db.close()
 
-        created.append({'email': email_addr, 'password': password})
-
-    return jsonify({'ok': True, 'created': created})
+@app.route('/api/admin/job/<job_id>')
+@admin_required
+def api_admin_job_status(job_id):
+    with jobs_lock:
+        job = jobs.get(job_id)
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+    return jsonify(job)
 
 
 @app.route('/api/admin/delete', methods=['POST'])
@@ -485,24 +681,31 @@ def api_admin_generate():
 def api_admin_delete():
     data = request.get_json()
     email_addr = (data.get('email') or '').strip()
-    if not email_addr:
+    emails = data.get('emails', [])
+
+    # Support bulk delete
+    if emails:
+        to_delete = [e.strip() for e in emails if e.strip() and e.strip() != f'admin@{DOMAIN}']
+    elif email_addr:
+        if email_addr == f'admin@{DOMAIN}':
+            return jsonify({'error': 'Cannot delete admin'}), 403
+        to_delete = [email_addr]
+    else:
         return jsonify({'error': 'Email required'}), 400
 
-    parts = email_addr.split('@')
-    if len(parts) != 2:
-        return jsonify({'error': 'Invalid email'}), 400
-
-    if email_addr == f'admin@{DOMAIN}':
-        return jsonify({'error': 'Cannot delete admin'}), 403
-
-    mailu_command(['user-delete', parts[0] + '@' + parts[1]])
+    for addr in to_delete:
+        parts = addr.split('@')
+        if len(parts) != 2:
+            continue
+        mailu_command(['user-delete', addr])
 
     db = get_db()
-    db.execute('DELETE FROM generated_accounts WHERE email = ?', (email_addr,))
+    for addr in to_delete:
+        db.execute('DELETE FROM generated_accounts WHERE email = ?', (addr,))
     db.commit()
     db.close()
 
-    return jsonify({'ok': True})
+    return jsonify({'ok': True, 'deleted': len(to_delete)})
 
 
 # --- SPA ---

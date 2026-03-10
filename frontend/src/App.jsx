@@ -348,7 +348,7 @@ function TagIcon({ name }) {
 function AccountManager({ accounts, setAccounts, reload }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [genCount, setGenCount] = useState(1)
+  const [genCount, setGenCount] = useState(5)
   const [msg, setMsg] = useState('')
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState('')
@@ -357,6 +357,7 @@ function AccountManager({ accounts, setAccounts, reload }) {
   const [filterTag, setFilterTag] = useState('')
   const [domains, setDomains] = useState(['kmr-mail.online'])
   const [domain, setDomain] = useState('kmr-mail.online')
+  const [jobProgress, setJobProgress] = useState(null) // {done, total, status}
 
   useEffect(() => {
     fetch(`${API}/domains`).then(r => r.json()).then(d => {
@@ -402,15 +403,45 @@ function AccountManager({ accounts, setAccounts, reload }) {
 
   const generate = async () => {
     setLoading(true)
-    const r = await fetch(`${API}/admin/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ count: genCount, domain })
-    })
-    const data = await r.json()
-    setMsg(`Generated ${data.created.length} accounts`)
-    setLoading(false)
-    reload()
+    setMsg('')
+    try {
+      const r = await fetch(`${API}/admin/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ count: genCount, domain })
+      })
+      const data = await r.json()
+      if (data.job_id) {
+        // Background job — poll for progress
+        setJobProgress({ done: 0, total: genCount, status: 'running' })
+        const pollInterval = setInterval(async () => {
+          try {
+            const jr = await fetch(`${API}/admin/job/${data.job_id}`)
+            const job = await jr.json()
+            setJobProgress({ done: job.done, total: job.total, status: job.status })
+            if (job.status === 'done') {
+              clearInterval(pollInterval)
+              setJobProgress(null)
+              setMsg(`Generated ${job.created.length} accounts${job.errors ? ` (${job.errors} errors)` : ''}`)
+              setLoading(false)
+              reload()
+            }
+          } catch {
+            clearInterval(pollInterval)
+            setJobProgress(null)
+            setLoading(false)
+            reload()
+          }
+        }, 1500)
+      } else {
+        setMsg(`Generated ${data.created?.length || 0} accounts`)
+        setLoading(false)
+        reload()
+      }
+    } catch {
+      setMsg('Connection error')
+      setLoading(false)
+    }
   }
 
   const del = async (email) => {
@@ -420,6 +451,22 @@ function AccountManager({ accounts, setAccounts, reload }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email })
     })
+    reload()
+  }
+
+  const deleteSelected = async () => {
+    if (!selected.size) return
+    if (!confirm(`Delete ${selected.size} selected accounts?`)) return
+    setLoading(true)
+    setMsg('')
+    await fetch(`${API}/admin/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emails: Array.from(selected) })
+    })
+    setSelected(new Set())
+    setMsg(`Deleted ${selected.size} accounts`)
+    setLoading(false)
     reload()
   }
 
@@ -485,11 +532,19 @@ function AccountManager({ accounts, setAccounts, reload }) {
             <label className="gen-label">Count:</label>
             <div className="gen-count-wrap">
               <button type="button" className="gen-count-btn" onClick={() => setGenCount(Math.max(1, Number(genCount) - 1))}>−</button>
-              <input type="number" min="1" max="50" value={genCount} onChange={e => setGenCount(e.target.value)} />
-              <button type="button" className="gen-count-btn" onClick={() => setGenCount(Math.min(50, Number(genCount) + 1))}>+</button>
+              <input type="number" min="1" max="200" value={genCount} onChange={e => setGenCount(e.target.value)} />
+              <button type="button" className="gen-count-btn" onClick={() => setGenCount(Math.min(200, Number(genCount) + 1))}>+</button>
             </div>
-            <button className="gen-btn" onClick={generate} disabled={loading}>Generate</button>
+            <button className="gen-btn" onClick={generate} disabled={loading}>
+              {loading && jobProgress ? `${jobProgress.done}/${jobProgress.total}...` : loading ? 'Working...' : 'Generate'}
+            </button>
           </div>
+          {jobProgress && (
+            <div className="job-progress">
+              <div className="job-progress-bar" style={{width: `${Math.round(jobProgress.done / jobProgress.total * 100)}%`}} />
+              <span className="job-progress-text">{jobProgress.done}/{jobProgress.total} ({Math.round(jobProgress.done / jobProgress.total * 100)}%)</span>
+            </div>
+          )}
         </div>
 
         {msg && <div className="status-msg">{msg}</div>}
@@ -499,6 +554,9 @@ function AccountManager({ accounts, setAccounts, reload }) {
             <h3>Selected ({selected.size})</h3>
             <button className="copy-selected-btn" onClick={copySelected}>
               {copied === 'selected' ? 'Copied!' : `Copy ${selected.size} accounts`}
+            </button>
+            <button className="del-selected-btn" onClick={deleteSelected}>
+              Delete {selected.size} selected
             </button>
             <button className="clear-sel-btn" onClick={() => setSelected(new Set())}>Clear selection</button>
           </div>

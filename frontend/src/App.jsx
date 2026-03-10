@@ -191,6 +191,8 @@ function AdminMail({ user, accounts }) {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [search, setSearch] = useState('')
+  const [accSearch, setAccSearch] = useState('')
+  const [showAccList, setShowAccList] = useState(false)
 
   const loadMail = (silent) => {
     if (!silent) setLoading(true)
@@ -239,6 +241,7 @@ function AdminMail({ user, accounts }) {
   }
 
   const allAccounts = [user.email, ...accounts.map(a => a.email)]
+  const filteredAccounts = allAccounts.filter(a => !accSearch || a.toLowerCase().includes(accSearch.toLowerCase()))
   const curAcc = accounts.find(a => a.email === currentAccount)
   const curTags = curAcc?.tags || {}
   const activeTags = TAGS.filter(t => curTags[t.key])
@@ -247,16 +250,33 @@ function AdminMail({ user, accounts }) {
     <div className="inbox-layout">
       <div className="mail-list">
         <div className="mail-list-header">
-          <select className="account-select" value={currentAccount} onChange={e => switchAccount(e.target.value)}>
-            {allAccounts.map(a => {
-              const acc = accounts.find(x => x.email === a)
-              const tags = acc?.tags || {}
-              const active = TAGS.filter(t => tags[t.key])
-              const label = a === user.email ? 'admin' : a.split('@')[0]
-              const badges = active.map(t => t.label.charAt(0)).join('')
-              return <option key={a} value={a}>{label}{badges ? ` [${badges}]` : ''}</option>
-            })}
-          </select>
+          <div className="account-switcher">
+            <button className="account-switcher-btn" onClick={() => setShowAccList(!showAccList)}>
+              <span className="account-switcher-email">{currentAccount === user.email ? '✦ admin' : currentAccount.split('@')[0]}</span>
+              <span className="account-switcher-domain">@{currentAccount.split('@')[1]}</span>
+              <span className="account-switcher-arrow">{showAccList ? '▲' : '▼'}</span>
+            </button>
+            {showAccList && (
+              <div className="account-dropdown">
+                <input className="account-dropdown-search" placeholder="Search accounts..." value={accSearch} onChange={e => setAccSearch(e.target.value)} autoFocus />
+                <div className="account-dropdown-list">
+                  {filteredAccounts.map(a => {
+                    const acc = accounts.find(x => x.email === a)
+                    const tags = acc?.tags || {}
+                    const active = TAGS.filter(t => tags[t.key])
+                    return (
+                      <div key={a} className={`account-dropdown-item ${a === currentAccount ? 'active' : ''}`} onClick={() => { switchAccount(a); setShowAccList(false); setAccSearch('') }}>
+                        <span className="account-dropdown-name">{a === user.email ? '✦ admin' : a.split('@')[0]}</span>
+                        <span className="account-dropdown-domain">@{a.split('@')[1]}</span>
+                        {active.length > 0 && <span className="account-dropdown-tags">{active.map(t => t.label.charAt(0)).join('')}</span>}
+                      </div>
+                    )
+                  })}
+                  {filteredAccounts.length === 0 && <div className="account-dropdown-empty">No accounts found</div>}
+                </div>
+              </div>
+            )}
+          </div>
           <button className="refresh-btn" onClick={() => loadMail(true)} disabled={refreshing}>{refreshing ? '⟳' : '↻'}</button>
         </div>
         {curAcc && activeTags.length > 0 && (
@@ -441,24 +461,35 @@ function AccountManager({ accounts, setAccounts, reload }) {
       <div className="accounts-panel">
         <h3>Create Account</h3>
         <form onSubmit={create} className="create-form">
+          <div className="domain-picker">
+            {domains.map(d => (
+              <button type="button" key={d} className={`domain-btn ${domain === d ? 'active' : ''}`} onClick={() => setDomain(d)}>{d}</button>
+            ))}
+          </div>
           <div className="input-row">
             <input placeholder="username" value={username} onChange={e => setUsername(e.target.value)} />
-            <span className="domain">@</span>
-            <select className="domain-select" value={domain} onChange={e => setDomain(e.target.value)}>
-              {domains.map(d => <option key={d} value={d}>{d}</option>)}
-            </select>
+            <span className="domain">@{domain}</span>
           </div>
           <input type="password" placeholder="Password (6+ chars)" value={password} onChange={e => setPassword(e.target.value)} />
           <button type="submit" disabled={loading}>Create</button>
         </form>
 
         <h3>Generate Random</h3>
-        <div className="gen-row">
-          <input type="number" min="1" max="50" value={genCount} onChange={e => setGenCount(e.target.value)} />
-          <select className="domain-select" value={domain} onChange={e => setDomain(e.target.value)}>
-            {domains.map(d => <option key={d} value={d}>{d}</option>)}
-          </select>
-          <button onClick={generate} disabled={loading}>Generate</button>
+        <div className="gen-section">
+          <div className="domain-picker">
+            {domains.map(d => (
+              <button type="button" key={d} className={`domain-btn ${domain === d ? 'active' : ''}`} onClick={() => setDomain(d)}>{d}</button>
+            ))}
+          </div>
+          <div className="gen-row">
+            <label className="gen-label">Count:</label>
+            <div className="gen-count-wrap">
+              <button type="button" className="gen-count-btn" onClick={() => setGenCount(Math.max(1, Number(genCount) - 1))}>−</button>
+              <input type="number" min="1" max="50" value={genCount} onChange={e => setGenCount(e.target.value)} />
+              <button type="button" className="gen-count-btn" onClick={() => setGenCount(Math.min(50, Number(genCount) + 1))}>+</button>
+            </div>
+            <button className="gen-btn" onClick={generate} disabled={loading}>Generate</button>
+          </div>
         </div>
 
         {msg && <div className="status-msg">{msg}</div>}

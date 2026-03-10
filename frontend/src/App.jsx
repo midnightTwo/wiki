@@ -335,6 +335,17 @@ function AccountManager({ accounts, setAccounts, reload }) {
   const [selected, setSelected] = useState(new Set())
   const [search, setSearch] = useState('')
   const [filterTag, setFilterTag] = useState('')
+  const [domains, setDomains] = useState(['kmr-mail.online'])
+  const [domain, setDomain] = useState('kmr-mail.online')
+
+  useEffect(() => {
+    fetch(`${API}/domains`).then(r => r.json()).then(d => {
+      if (d.domains && d.domains.length) {
+        setDomains(d.domains)
+        setDomain(d.domains[0])
+      }
+    }).catch(() => {})
+  }, [])
 
   const toggleTag = async (email, tagKey, currentTags) => {
     const current = currentTags[tagKey] || null
@@ -358,7 +369,7 @@ function AccountManager({ accounts, setAccounts, reload }) {
     const r = await fetch(`${API}/admin/create`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify({ username, password, domain })
     })
     const data = await r.json()
     if (!r.ok) { setMsg(data.error); setLoading(false); return }
@@ -374,7 +385,7 @@ function AccountManager({ accounts, setAccounts, reload }) {
     const r = await fetch(`${API}/admin/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ count: genCount })
+      body: JSON.stringify({ count: genCount, domain })
     })
     const data = await r.json()
     setMsg(`Generated ${data.created.length} accounts`)
@@ -432,7 +443,10 @@ function AccountManager({ accounts, setAccounts, reload }) {
         <form onSubmit={create} className="create-form">
           <div className="input-row">
             <input placeholder="username" value={username} onChange={e => setUsername(e.target.value)} />
-            <span className="domain">@kmr-mail.online</span>
+            <span className="domain">@</span>
+            <select className="domain-select" value={domain} onChange={e => setDomain(e.target.value)}>
+              {domains.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
           </div>
           <input type="password" placeholder="Password (6+ chars)" value={password} onChange={e => setPassword(e.target.value)} />
           <button type="submit" disabled={loading}>Create</button>
@@ -441,6 +455,9 @@ function AccountManager({ accounts, setAccounts, reload }) {
         <h3>Generate Random</h3>
         <div className="gen-row">
           <input type="number" min="1" max="50" value={genCount} onChange={e => setGenCount(e.target.value)} />
+          <select className="domain-select" value={domain} onChange={e => setDomain(e.target.value)}>
+            {domains.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
           <button onClick={generate} disabled={loading}>Generate</button>
         </div>
 

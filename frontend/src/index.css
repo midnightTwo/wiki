@@ -340,7 +340,18 @@ header {
 
 .domain {
   color: var(--text-dim); font-size: 0.8rem;
-  padding-right: 0.8rem; white-space: nowrap;
+  padding: 0 0.3rem; white-space: nowrap;
+}
+
+.domain-select {
+  background: transparent; border: none;
+  color: var(--text-dim); font-size: 0.8rem;
+  padding-right: 0.6rem; outline: none;
+  cursor: pointer; appearance: auto;
+}
+
+.domain-select option {
+  background: var(--bg-1); color: var(--text);
 }
 
 .accounts-panel input[type="password"],

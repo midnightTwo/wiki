@@ -15,6 +15,7 @@ app = Flask(__name__, static_folder='../frontend/dist', static_url_path='')
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 
 DOMAIN = os.environ.get('MAIL_DOMAIN', 'kmr-mail.online')
+DOMAINS = [d.strip() for d in os.environ.get('MAIL_DOMAINS', DOMAIN).split(',') if d.strip()]
 IMAP_HOST = os.environ.get('IMAP_HOST', 'imap')
 IMAP_PORT = int(os.environ.get('IMAP_PORT', '993'))
 ADMIN_CONTAINER = os.environ.get('ADMIN_CONTAINER', 'wiki-admin-1')
@@ -356,6 +357,12 @@ def _delete_mail(mail_id, user_email, user_password):
 
 # --- Admin: Account Management ---
 
+@app.route('/api/domains')
+@login_required
+def api_domains():
+    return jsonify({'domains': DOMAINS})
+
+
 def mailu_command(cmd):
     try:
         result = subprocess.run(
@@ -408,14 +415,17 @@ def api_admin_create():
     data = request.get_json()
     username = (data.get('username') or '').strip()
     password = data.get('password', '')
+    domain = (data.get('domain') or '').strip() or DOMAIN
 
+    if domain not in DOMAINS:
+        return jsonify({'error': f'Domain {domain} not allowed'}), 400
     if not username:
         return jsonify({'error': 'Username required'}), 400
     if not password or len(password) < 6:
         return jsonify({'error': 'Password min 6 chars'}), 400
 
-    email_addr = f'{username}@{DOMAIN}'
-    result = mailu_command(['user', username, DOMAIN, password])
+    email_addr = f'{username}@{domain}'
+    result = mailu_command(['user', username, domain, password])
 
     if 'exists' in result.lower():
         return jsonify({'error': f'{email_addr} already exists'}), 409
@@ -439,14 +449,18 @@ def api_admin_create():
 def api_admin_generate():
     data = request.get_json() or {}
     count = min(int(data.get('count', 1)), 50)
+    domain = (data.get('domain') or '').strip() or DOMAIN
+
+    if domain not in DOMAINS:
+        return jsonify({'error': f'Domain {domain} not allowed'}), 400
 
     created = []
     for _ in range(count):
         username = secrets.token_hex(4)
         password = secrets.token_urlsafe(10)
-        email_addr = f'{username}@{DOMAIN}'
+        email_addr = f'{username}@{domain}'
 
-        result = mailu_command(['user', username, DOMAIN, password])
+        result = mailu_command(['user', username, domain, password])
         if 'exists' in result.lower():
             continue
 

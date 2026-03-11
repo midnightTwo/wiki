@@ -174,11 +174,14 @@ function Admin({ user, onLogout }) {
         <nav className="tabs">
           <button className={tab === 'mail' ? 'active' : ''} onClick={() => setTab('mail')}>Mail</button>
           <button className={tab === 'accounts' ? 'active' : ''} onClick={() => setTab('accounts')}>Accounts</button>
+          <button className={tab === 'outlook' ? 'active' : ''} onClick={() => setTab('outlook')}>Outlook</button>
         </nav>
         <span className="user-info">admin</span>
         <button className="logout-btn" onClick={onLogout}>Logout</button>
       </header>
-      {tab === 'mail' ? <AdminMail user={user} accounts={accounts} /> : <AccountManager accounts={accounts} setAccounts={setAccounts} reload={loadAccounts} />}
+      {tab === 'mail' ? <AdminMail user={user} accounts={accounts} /> :
+       tab === 'outlook' ? <OutlookManager /> :
+       <AccountManager accounts={accounts} setAccounts={setAccounts} reload={loadAccounts} />}
     </div>
   )
 }
@@ -622,6 +625,234 @@ function AccountManager({ accounts, setAccounts, reload }) {
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  )
+}
+
+// ==================== OUTLOOK MANAGER ====================
+function OutlookManager() {
+  const [accounts, setAccounts] = useState([])
+  const [bulkText, setBulkText] = useState('')
+  const [msg, setMsg] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [copied, setCopied] = useState('')
+  const [selected, setSelected] = useState(new Set())
+  const [search, setSearch] = useState('')
+  const [mailAccount, setMailAccount] = useState(null)
+  const [messages, setMessages] = useState([])
+  const [mailLoading, setMailLoading] = useState(false)
+  const [mailDetail, setMailDetail] = useState(null)
+  const [selectedMail, setSelectedMail] = useState(null)
+  const [refreshing, setRefreshing] = useState(false)
+
+  const loadAccounts = () => {
+    fetch(`${API}/admin/outlook/accounts`).then(r => r.json())
+      .then(data => setAccounts(data.accounts || []))
+  }
+  useEffect(loadAccounts, [])
+
+  const upload = async () => {
+    if (!bulkText.trim()) { setMsg('Paste accounts first'); return }
+    setLoading(true); setMsg('')
+    try {
+      const r = await fetch(`${API}/admin/outlook/upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: bulkText })
+      })
+      const data = await r.json()
+      if (!r.ok) { setMsg(data.error || 'Upload failed'); setLoading(false); return }
+      setMsg(`Added: ${data.added}${data.skipped ? `, skipped: ${data.skipped}` : ''}${data.errors?.length ? `, errors: ${data.errors.length}` : ''}`)
+      if (data.added > 0) setBulkText('')
+      setLoading(false)
+      loadAccounts()
+    } catch { setMsg('Connection error'); setLoading(false) }
+  }
+
+  const del = async (email) => {
+    if (!confirm(`Delete ${email}?`)) return
+    await fetch(`${API}/admin/outlook/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    })
+    if (mailAccount === email) { setMailAccount(null); setMessages([]); setMailDetail(null) }
+    loadAccounts()
+  }
+
+  const deleteSelected = async () => {
+    if (!selected.size) return
+    if (!confirm(`Delete ${selected.size} selected Outlook accounts?`)) return
+    setLoading(true)
+    await fetch(`${API}/admin/outlook/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emails: Array.from(selected) })
+    })
+    setSelected(new Set())
+    setLoading(false)
+    loadAccounts()
+  }
+
+  const toggleSelect = (email) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(email)) next.delete(email)
+      else next.add(email)
+      return next
+    })
+  }
+
+  const copy = (text, id) => {
+    copyText(text)
+    setCopied(id)
+    setTimeout(() => setCopied(''), 1500)
+  }
+
+  const openMailbox = (acc) => {
+    setMailAccount(acc.email)
+    setMessages([])
+    setMailDetail(null)
+    setSelectedMail(null)
+    loadOutlookMail(acc.email, false)
+  }
+
+  const loadOutlookMail = (email, silent) => {
+    if (!silent) setMailLoading(true)
+    else setRefreshing(true)
+    fetch(`${API}/admin/outlook/mail?account=${encodeURIComponent(email)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) { setMsg(`Mail error: ${data.error}`); setMessages([]) }
+        else setMessages(data.messages || [])
+        setMailLoading(false); setRefreshing(false)
+      })
+      .catch(() => { setMailLoading(false); setRefreshing(false) })
+  }
+
+  const openMail = async (msg) => {
+    setSelectedMail(msg.id)
+    setMailDetail(null)
+    const r = await fetch(`${API}/admin/outlook/mail/${msg.id}?account=${encodeURIComponent(mailAccount)}`)
+    const data = await r.json()
+    setMailDetail(data)
+  }
+
+  const filtered = accounts.filter(a => !search || a.email.toLowerCase().includes(search.toLowerCase()))
+
+  // If viewing a mailbox
+  if (mailAccount) {
+    return (
+      <div className="inbox-layout">
+        <div className="mail-list">
+          <div className="mail-list-header">
+            <button className="outlook-back-btn" onClick={() => { setMailAccount(null); setMessages([]); setMailDetail(null) }}>← Back</button>
+            <span className="outlook-mail-account">{mailAccount}</span>
+            <button className="refresh-btn" onClick={() => loadOutlookMail(mailAccount, true)} disabled={refreshing}>{refreshing ? '⟳' : '↻'}</button>
+          </div>
+          {mailLoading ? <div className="empty">Loading mail...</div> :
+           messages.length === 0 ? <div className="empty">No messages</div> :
+           messages.map(m => (
+            <div key={m.id} className={`mail-item ${selectedMail === m.id ? 'active' : ''} ${!m.seen ? 'unread' : ''} ${m.spam ? 'spam' : ''}`} onClick={() => openMail(m)}>
+              <div className="mail-from">{m.from.split('<')[0].trim() || m.from}{m.spam && <span className="spam-tag">SPAM</span>}</div>
+              <div className="mail-subject">{m.subject}</div>
+              <div className="mail-date">{m.date}</div>
+            </div>
+          ))}
+        </div>
+        <div className="mail-view">
+          {!mailDetail ? <div className="empty">Select a message</div> : (
+            <div className="mail-detail">
+              <h2>{mailDetail.subject}</h2>
+              <div className="mail-meta">
+                <span>From: {mailDetail.from}</span>
+                <span>Date: {mailDetail.date}</span>
+              </div>
+              {mailDetail.body_type === 'html' ?
+                <iframe className="mail-body-frame" srcDoc={wrapHtml(mailDetail.body)} sandbox="allow-popups allow-popups-to-escape-sandbox" /> :
+                <pre className="mail-body-text">{mailDetail.body}</pre>
+              }
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="accounts-wrap">
+      <div className="accounts-panel">
+        <h3>📧 Bulk Upload Outlook</h3>
+        <div className="outlook-format-hint">
+          Format per line:<br/>
+          <code>email:password:recovery:recov_pass:refresh_token:client_id</code>
+        </div>
+        <textarea
+          className="outlook-bulk-input"
+          placeholder={'Paste accounts here, one per line...\n\nemail:pass:recovery:recov_pass:token:client_id\nemail:pass:recovery:recov_pass:token:client_id'}
+          value={bulkText}
+          onChange={e => setBulkText(e.target.value)}
+          rows={10}
+        />
+        <div className="outlook-bulk-info">
+          {bulkText.trim() ? `${bulkText.trim().split('\n').filter(l => l.trim()).length} lines` : 'No data'}
+        </div>
+        <button onClick={upload} disabled={loading}>{loading ? 'Uploading...' : 'Upload Accounts'}</button>
+
+        {msg && <div className="status-msg">{msg}</div>}
+
+        {selected.size > 0 && (
+          <div className="selection-actions">
+            <h3>Selected ({selected.size})</h3>
+            <button className="del-selected-btn" onClick={deleteSelected}>Delete {selected.size} selected</button>
+            <button className="clear-sel-btn" onClick={() => setSelected(new Set())}>Clear selection</button>
+          </div>
+        )}
+      </div>
+
+      <div className="accounts-list">
+        <div className="accounts-toolbar">
+          <div className="accounts-toolbar-top">
+            <h3>Outlook Accounts ({filtered.length})</h3>
+          </div>
+          <div className="accounts-toolbar-bottom">
+            <input className="search-input" placeholder="Search accounts..." value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+        </div>
+        {filtered.map(a => (
+          <div key={a.email} className={`account-card ${selected.has(a.email) ? 'selected' : ''}`}>
+            <div className="account-card-header">
+              <div className="account-card-check" onClick={() => toggleSelect(a.email)}>
+                <div className={`checkbox ${selected.has(a.email) ? 'checked' : ''}`}>{selected.has(a.email) ? '✓' : ''}</div>
+              </div>
+              <div className="account-card-info">
+                <span className="account-email">{a.email}</span>
+                <span className="account-pass">{a.password}</span>
+              </div>
+              <div className="account-card-actions">
+                <button className="act-btn accent" onClick={() => openMailbox(a)} title="Open mailbox">📬 Mail</button>
+                <button className="act-btn" onClick={() => copy(a.email, 'oe:' + a.email)} title="Copy email">
+                  {copied === 'oe:' + a.email ? '✓' : 'Email'}
+                </button>
+                <button className="act-btn" onClick={() => copy(a.password, 'op:' + a.email)} title="Copy password">
+                  {copied === 'op:' + a.email ? '✓' : 'Pass'}
+                </button>
+                <button className="act-btn" onClick={() => copy(`${a.email}:${a.password}:${a.recovery_email}:${a.recovery_password}:${a.refresh_token}:${a.client_id}`, 'of:' + a.email)} title="Copy full line">
+                  {copied === 'of:' + a.email ? '✓' : 'Full'}
+                </button>
+                <button className="act-btn danger" onClick={() => del(a.email)} title="Delete">Del</button>
+              </div>
+            </div>
+            {a.recovery_email && (
+              <div className="outlook-recovery-info">
+                <span className="outlook-recovery-label">Recovery:</span>
+                <span className="outlook-recovery-email">{a.recovery_email}</span>
+              </div>
+            )}
+          </div>
+        ))}
+        {filtered.length === 0 && <div className="empty">No Outlook accounts yet. Upload some!</div>}
       </div>
     </div>
   )

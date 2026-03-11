@@ -704,3 +704,90 @@ header {
   .inbox-layout:has(.mail-item.active) .mail-list { display: none; }
   .inbox-layout:has(.mail-item.active) .mail-view { display: block; }
 }
+
+/* ============ OUTLOOK ============ */
+.outlook-bulk-input {
+  width: 100%;
+  min-height: 180px;
+  background: var(--bg-0);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.7rem 0.8rem;
+  color: var(--text);
+  font-size: 0.8rem;
+  font-family: 'Consolas', 'Courier New', monospace;
+  outline: none;
+  resize: vertical;
+  line-height: 1.5;
+}
+.outlook-bulk-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 10px rgba(255,26,64,0.1);
+}
+.outlook-bulk-input::placeholder {
+  color: var(--text-dim);
+  opacity: 0.5;
+}
+
+.outlook-format-hint {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  margin-bottom: 0.5rem;
+  line-height: 1.4;
+}
+.outlook-format-hint code {
+  background: var(--bg-0);
+  padding: 0.15rem 0.35rem;
+  border-radius: 3px;
+  font-size: 0.65rem;
+  color: var(--accent);
+  word-break: break-all;
+}
+
+.outlook-bulk-info {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-bottom: 0.5rem;
+}
+
+.outlook-back-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.outlook-back-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.outlook-mail-account {
+  font-size: 0.8rem;
+  color: var(--accent);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  margin: 0 0.5rem;
+}
+
+.outlook-recovery-info {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 14px 10px;
+  font-size: 0.75rem;
+}
+.outlook-recovery-label {
+  color: var(--text-dim);
+}
+.outlook-recovery-email {
+  color: #f5a623;
+  font-family: 'Consolas', 'Courier New', monospace;
+}

@@ -11,6 +11,7 @@ import subprocess
 import threading
 import time
 import uuid
+import requests as http_requests
 from datetime import datetime
 from functools import wraps
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -141,6 +142,16 @@ def init_db():
         db.execute('ALTER TABLE generated_accounts ADD COLUMN tags TEXT NOT NULL DEFAULT \'{}\'')
     except Exception:
         pass
+    db.execute('''CREATE TABLE IF NOT EXISTS outlook_accounts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        recovery_email TEXT DEFAULT '',
+        recovery_password TEXT DEFAULT '',
+        refresh_token TEXT NOT NULL,
+        client_id TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )''')
     db.commit()
     db.close()
 
@@ -706,6 +717,254 @@ def api_admin_delete():
     db.close()
 
     return jsonify({'ok': True, 'deleted': len(to_delete)})
+
+
+# --- Outlook Accounts ---
+
+@app.route('/api/admin/outlook/accounts')
+@admin_required
+def api_admin_outlook_accounts():
+    db = get_db()
+    rows = db.execute(
+        'SELECT id, email, password, recovery_email, recovery_password, refresh_token, client_id, created_at '
+        'FROM outlook_accounts ORDER BY id DESC'
+    ).fetchall()
+    db.close()
+    return jsonify({'accounts': [dict(r) for r in rows]})
+
+
+@app.route('/api/admin/outlook/upload', methods=['POST'])
+@admin_required
+def api_admin_outlook_upload():
+    """Bulk upload outlook accounts.
+    Format per line: email:password:recovery_email:recovery_password:refresh_token:client_id
+    Some lines may have extra fields at the end (ignored).
+    recovery_email and recovery_password are optional (can be missing).
+    Minimum: email:password:refresh_token:client_id (4 fields)
+    Full: email:password:recovery_email:recovery_password:refresh_token:client_id (6 fields)
+    """
+    data = request.get_json()
+    lines_text = (data.get('text') or '').strip()
+    if not lines_text:
+        return jsonify({'error': 'No data provided'}), 400
+
+    lines = [l.strip() for l in lines_text.splitlines() if l.strip()]
+    added = 0
+    skipped = 0
+    errors = []
+
+    db = get_db()
+    for line in lines:
+        parts = line.split(':')
+        if len(parts) < 4:
+            errors.append(f'Too few fields: {line[:60]}...')
+            continue
+
+        # Detect format by checking if parts look like email fields
+        # Full format (6+): email:password:recovery_email:recovery_password:refresh_token:client_id
+        # Short format (4): email:password:refresh_token:client_id
+        email_addr = parts[0].strip()
+        password = parts[1].strip()
+
+        if '@' not in email_addr:
+            errors.append(f'Invalid email: {email_addr}')
+            continue
+
+        if len(parts) >= 6:
+            # Full format: email:pass:recovery_email:recovery_pass:refresh_token:client_id
+            recovery_email = parts[2].strip()
+            recovery_password = parts[3].strip()
+            refresh_token = parts[4].strip()
+            client_id = parts[5].strip()
+        elif len(parts) >= 4:
+            # Short format: email:pass:refresh_token:client_id
+            recovery_email = ''
+            recovery_password = ''
+            refresh_token = parts[2].strip()
+            client_id = parts[3].strip()
+        else:
+            errors.append(f'Cannot parse: {line[:60]}...')
+            continue
+
+        if not refresh_token or not client_id:
+            errors.append(f'Missing token/client_id for {email_addr}')
+            continue
+
+        try:
+            db.execute(
+                'INSERT OR REPLACE INTO outlook_accounts '
+                '(email, password, recovery_email, recovery_password, refresh_token, client_id) '
+                'VALUES (?, ?, ?, ?, ?, ?)',
+                (email_addr, password, recovery_email, recovery_password, refresh_token, client_id)
+            )
+            added += 1
+        except Exception as e:
+            skipped += 1
+            errors.append(f'DB error for {email_addr}: {str(e)}')
+
+    db.commit()
+    db.close()
+    return jsonify({'ok': True, 'added': added, 'skipped': skipped, 'errors': errors})
+
+
+@app.route('/api/admin/outlook/delete', methods=['POST'])
+@admin_required
+def api_admin_outlook_delete():
+    data = request.get_json()
+    email_addr = (data.get('email') or '').strip()
+    emails = data.get('emails', [])
+
+    if emails:
+        to_delete = [e.strip() for e in emails if e.strip()]
+    elif email_addr:
+        to_delete = [email_addr]
+    else:
+        return jsonify({'error': 'Email required'}), 400
+
+    db = get_db()
+    for addr in to_delete:
+        db.execute('DELETE FROM outlook_accounts WHERE email = ?', (addr,))
+    db.commit()
+    db.close()
+    return jsonify({'ok': True, 'deleted': len(to_delete)})
+
+
+def _outlook_get_access_token(refresh_token, client_id):
+    """Get OAuth2 access token from Microsoft using refresh token."""
+    r = http_requests.post(
+        'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+        data={
+            'client_id': client_id,
+            'refresh_token': refresh_token,
+            'grant_type': 'refresh_token',
+            'scope': 'https://outlook.office.com/IMAP.AccessAsUser.All offline_access',
+        },
+        timeout=15
+    )
+    data = r.json()
+    access_token = data.get('access_token')
+    if not access_token:
+        error = data.get('error_description', data.get('error', 'Unknown error'))
+        raise Exception(f'Cannot get access_token: {error}')
+    return access_token
+
+
+def _outlook_imap_connect(email_addr, access_token):
+    """Connect to Outlook IMAP using OAuth2."""
+    auth_string = f'user={email_addr}\x01auth=Bearer {access_token}\x01\x01'
+    imap = imaplib.IMAP4_SSL('outlook.office365.com')
+    imap.authenticate('XOAUTH2', lambda _: auth_string.encode())
+    return imap
+
+
+@app.route('/api/admin/outlook/mail')
+@admin_required
+def api_admin_outlook_mail():
+    account = request.args.get('account', '').strip()
+    if not account:
+        return jsonify({'error': 'account param required'}), 400
+
+    db = get_db()
+    row = db.execute(
+        'SELECT refresh_token, client_id FROM outlook_accounts WHERE email = ?',
+        (account,)
+    ).fetchone()
+    db.close()
+
+    if not row:
+        return jsonify({'error': 'Account not found'}), 404
+
+    try:
+        access_token = _outlook_get_access_token(row['refresh_token'], row['client_id'])
+        imap = _outlook_imap_connect(account, access_token)
+
+        messages = []
+        for folder in ['INBOX', 'Junk']:
+            try:
+                status, _ = imap.select(folder, readonly=True)
+                if status != 'OK':
+                    continue
+                _, data = imap.search(None, 'ALL')
+                ids = data[0].split()
+                for mid in reversed(ids[-100:]):
+                    _, msg_data = imap.fetch(mid, '(RFC822 FLAGS)')
+                    raw = msg_data[0][1]
+                    msg = email.message_from_bytes(raw)
+
+                    flags_raw = msg_data[0][0].decode() if msg_data[0][0] else ''
+                    is_seen = '\\Seen' in flags_raw
+
+                    date_str = msg.get('Date', '')
+                    try:
+                        date_parsed = email.utils.parsedate_to_datetime(date_str)
+                        date_fmt = date_parsed.strftime('%d.%m.%Y %H:%M')
+                        date_ts = date_parsed.timestamp()
+                    except Exception:
+                        date_fmt = date_str[:20]
+                        date_ts = 0
+
+                    messages.append({
+                        'id': f'{folder}:{mid.decode()}',
+                        'folder': folder,
+                        'from': decode_header_value(msg.get('From', '')),
+                        'to': decode_header_value(msg.get('To', '')),
+                        'subject': decode_header_value(msg.get('Subject', '(no subject)')),
+                        'date': date_fmt,
+                        'timestamp': date_ts,
+                        'seen': is_seen,
+                        'spam': folder == 'Junk'
+                    })
+            except Exception:
+                continue
+
+        imap.logout()
+        messages.sort(key=lambda m: m['timestamp'], reverse=True)
+        return jsonify({'messages': messages})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/outlook/mail/<path:mail_id>')
+@admin_required
+def api_admin_outlook_mail_detail(mail_id):
+    account = request.args.get('account', '').strip()
+    if not account:
+        return jsonify({'error': 'account param required'}), 400
+
+    db = get_db()
+    row = db.execute(
+        'SELECT refresh_token, client_id FROM outlook_accounts WHERE email = ?',
+        (account,)
+    ).fetchone()
+    db.close()
+
+    if not row:
+        return jsonify({'error': 'Account not found'}), 404
+
+    try:
+        parts = mail_id.split(':')
+        folder = parts[0]
+        mid = parts[1]
+
+        access_token = _outlook_get_access_token(row['refresh_token'], row['client_id'])
+        imap = _outlook_imap_connect(account, access_token)
+        imap.select(folder)
+        _, msg_data = imap.fetch(mid.encode(), '(RFC822)')
+        raw = msg_data[0][1]
+        msg = email.message_from_bytes(raw)
+        body, body_type = get_email_body(msg)
+        imap.logout()
+
+        return jsonify({
+            'from': decode_header_value(msg.get('From', '')),
+            'to': decode_header_value(msg.get('To', '')),
+            'subject': decode_header_value(msg.get('Subject', '')),
+            'date': decode_header_value(msg.get('Date', '')),
+            'body': body,
+            'body_type': body_type
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 # --- SPA ---

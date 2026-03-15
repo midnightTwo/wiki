@@ -42,7 +42,8 @@ function App() {
   if (loading) return <div className="loader">Loading...</div>
   if (!user) return <Login onLogin={setUser} />
   if (user.is_admin) return <Admin user={user} onLogout={() => { fetch(`${API}/logout`, {method:'POST'}); setUser(null) }} />
-  return <Inbox user={user} onLogout={() => { fetch(`${API}/logout`, {method:'POST'}); setUser(null) }} />
+  if (user.is_outlook) return <OutlookUserView user={user} onLogout={() => { fetch(`${API}/logout`, {method:'POST'}); setUser(null) }} />
+  return <UserView user={user} onLogout={() => { fetch(`${API}/logout`, {method:'POST'}); setUser(null) }} />
 }
 
 // ==================== LOGIN ====================
@@ -83,8 +84,114 @@ function Login({ onLogin }) {
   )
 }
 
+// ==================== OUTLOOK USER VIEW (logged in with Outlook account) ====================
+function OutlookUserView({ user, onLogout }) {
+  const [messages, setMessages] = useState([])
+  const [selected, setSelected] = useState(null)
+  const [detail, setDetail] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+
+  const loadMail = (silent) => {
+    if (!silent) setLoading(true)
+    else setRefreshing(true)
+    fetch(`${API}/admin/outlook/mail?account=${encodeURIComponent(user.email)}`)
+      .then(r => r.json())
+      .then(data => { setMessages(data.messages || []); setLoading(false); setRefreshing(false) })
+      .catch(() => { setLoading(false); setRefreshing(false) })
+  }
+
+  useEffect(() => {
+    loadMail(false)
+    const timer = setInterval(() => loadMail(true), 30000)
+    return () => clearInterval(timer)
+  }, [])
+
+  const openMail = async (msg) => {
+    setSelected(msg.id)
+    setDetail(null)
+    const r = await fetch(`${API}/admin/outlook/mail/${msg.id}?account=${encodeURIComponent(user.email)}`)
+    const data = await r.json()
+    setDetail(data)
+  }
+
+  return (
+    <div className="app-wrap">
+      <header>
+        <span className="logo">KMR MAIL</span>
+        <span className="user-info">{user.email}</span>
+        <button className="logout-btn" onClick={onLogout}>Logout</button>
+      </header>
+      <div className="inbox-layout">
+        <div className="mail-list">
+          <div className="mail-list-header">
+            <span>Inbox</span>
+            <button className="refresh-btn" onClick={() => loadMail(true)} disabled={refreshing}>{refreshing ? '\u27f3' : '\u21bb'} Refresh</button>
+          </div>
+          {loading ? <div className="empty">Loading...</div> :
+           messages.length === 0 ? <div className="empty">No messages</div> :
+           messages.map(m => (
+            <div key={m.id} className={`mail-item ${selected === m.id ? 'active' : ''} ${!m.seen ? 'unread' : ''} ${m.spam ? 'spam' : ''}`} onClick={() => openMail(m)}>
+              <div className="mail-from">{m.from.split('<')[0].trim() || m.from}{m.spam && <span className="spam-tag">SPAM</span>}</div>
+              <div className="mail-subject">{m.subject}</div>
+              <div className="mail-date">{m.date}</div>
+            </div>
+          ))}
+        </div>
+        <div className="mail-view">
+          {!detail ? <div className="empty">Select a message</div> : (
+            <div className="mail-detail">
+              <h2>{detail.subject}</h2>
+              <div className="mail-meta">
+                <span>From: {detail.from}</span>
+                <span>Date: {detail.date}</span>
+              </div>
+              {detail.body_type === 'html' ?
+                <iframe className="mail-body-frame" srcDoc={wrapHtml(detail.body)} sandbox="allow-popups allow-popups-to-escape-sandbox" /> :
+                <pre className="mail-body-text">{detail.body}</pre>
+              }
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ==================== USER VIEW (regular user with tabs) ====================
+function UserView({ user, onLogout }) {
+  const [tab, setTab] = useState('mail')
+  return (
+    <div className="app-wrap">
+      <header>
+        <span className="logo">KMR MAIL</span>
+        <nav className="tabs">
+          <button className={tab === 'mail' ? 'active' : ''} onClick={() => setTab('mail')}>Mail</button>
+          <button className={tab === 'outlook' ? 'active' : ''} onClick={() => setTab('outlook')}>Outlook</button>
+        </nav>
+        <span className="user-info">{user.email}</span>
+        <button className="logout-btn" onClick={onLogout}>Logout</button>
+      </header>
+      {tab === 'outlook' ? <OutlookManager /> : <InboxContent user={user} />}
+    </div>
+  )
+}
+
 // ==================== INBOX (regular user) ====================
 function Inbox({ user, onLogout }) {
+  return (
+    <div className="app-wrap">
+      <header>
+        <span className="logo">KMR MAIL</span>
+        <span className="user-info">{user.email}</span>
+        <button className="logout-btn" onClick={onLogout}>Logout</button>
+      </header>
+      <InboxContent user={user} />
+    </div>
+  )
+}
+
+function InboxContent({ user }) {
   const [messages, setMessages] = useState([])
   const [selected, setSelected] = useState(null)
   const [detail, setDetail] = useState(null)
@@ -114,18 +221,12 @@ function Inbox({ user, onLogout }) {
   }
 
   return (
-    <div className="app-wrap">
-      <header>
-        <span className="logo">KMR MAIL</span>
-        <span className="user-info">{user.email}</span>
-        <button className="logout-btn" onClick={onLogout}>Logout</button>
-      </header>
-      <div className="inbox-layout">
-        <div className="mail-list">
-          <div className="mail-list-header">
-            <span>Inbox</span>
-            <button className="refresh-btn" onClick={() => loadMail(true)} disabled={refreshing}>{refreshing ? '⟳' : '↻'} Refresh</button>
-          </div>
+    <div className="inbox-layout">
+      <div className="mail-list">
+        <div className="mail-list-header">
+          <span>Inbox</span>
+          <button className="refresh-btn" onClick={() => loadMail(true)} disabled={refreshing}>{refreshing ? '⟳' : '↻'} Refresh</button>
+        </div>
           {loading ? <div className="empty">Loading...</div> :
            messages.length === 0 ? <div className="empty">No messages</div> :
            messages.map(m => (
@@ -152,7 +253,6 @@ function Inbox({ user, onLogout }) {
           )}
         </div>
       </div>
-    </div>
   )
 }
 
@@ -197,21 +297,23 @@ function AdminMail({ user, accounts }) {
   const [accSearch, setAccSearch] = useState('')
   const [showAccList, setShowAccList] = useState(false)
 
-  const loadMail = (silent) => {
+  const loadMail = (silent, controller) => {
     if (!silent) setLoading(true)
     else setRefreshing(true)
     const url = currentAccount === user.email
       ? `${API}/mail`
       : `${API}/admin/mail?account=${encodeURIComponent(currentAccount)}`
-    fetch(url).then(r => r.json())
+    const opts = controller ? { signal: controller.signal } : {}
+    fetch(url, opts).then(r => r.json())
       .then(data => { setMessages(data.messages || []); setLoading(false); setRefreshing(false) })
-      .catch(() => { setLoading(false); setRefreshing(false) })
+      .catch(e => { if (e.name !== 'AbortError') { setLoading(false); setRefreshing(false) } })
   }
 
   useEffect(() => {
-    loadMail(false)
+    const controller = new AbortController()
+    loadMail(false, controller)
     const timer = setInterval(() => loadMail(true), 30000)
-    return () => clearInterval(timer)
+    return () => { controller.abort(); clearInterval(timer) }
   }, [currentAccount])
 
   const switchAccount = (acc) => {
@@ -245,6 +347,7 @@ function AdminMail({ user, accounts }) {
 
   const allAccounts = [user.email, ...accounts.map(a => a.email)]
   const filteredAccounts = allAccounts.filter(a => !accSearch || a.toLowerCase().includes(accSearch.toLowerCase()))
+  const displayAccounts = filteredAccounts.slice(0, 50)
   const curAcc = accounts.find(a => a.email === currentAccount)
   const curTags = curAcc?.tags || {}
   const activeTags = TAGS.filter(t => curTags[t.key])
@@ -263,7 +366,7 @@ function AdminMail({ user, accounts }) {
               <div className="account-dropdown">
                 <input className="account-dropdown-search" placeholder="Search accounts..." value={accSearch} onChange={e => setAccSearch(e.target.value)} autoFocus />
                 <div className="account-dropdown-list">
-                  {filteredAccounts.map(a => {
+                  {displayAccounts.map(a => {
                     const acc = accounts.find(x => x.email === a)
                     const tags = acc?.tags || {}
                     const active = TAGS.filter(t => tags[t.key])
@@ -275,6 +378,9 @@ function AdminMail({ user, accounts }) {
                       </div>
                     )
                   })}
+                  {displayAccounts.length < filteredAccounts.length && (
+                    <div className="account-dropdown-empty">+{filteredAccounts.length - displayAccounts.length} more — type to search</div>
+                  )}
                   {filteredAccounts.length === 0 && <div className="account-dropdown-empty">No accounts found</div>}
                 </div>
               </div>
@@ -639,6 +745,7 @@ function OutlookManager() {
   const [copied, setCopied] = useState('')
   const [selected, setSelected] = useState(new Set())
   const [search, setSearch] = useState('')
+  const [filterTag, setFilterTag] = useState('')
   const [mailAccount, setMailAccount] = useState(null)
   const [messages, setMessages] = useState([])
   const [mailLoading, setMailLoading] = useState(false)
@@ -718,10 +825,10 @@ function OutlookManager() {
     loadOutlookMail(acc.email, false)
   }
 
-  const loadOutlookMail = (email, silent) => {
+  const loadOutlookMail = (emailAddr, silent) => {
     if (!silent) setMailLoading(true)
     else setRefreshing(true)
-    fetch(`${API}/admin/outlook/mail?account=${encodeURIComponent(email)}`)
+    fetch(`${API}/admin/outlook/mail?account=${encodeURIComponent(emailAddr)}`)
       .then(r => r.json())
       .then(data => {
         if (data.error) { setMsg(`Mail error: ${data.error}`); setMessages([]) }
@@ -731,6 +838,13 @@ function OutlookManager() {
       .catch(() => { setMailLoading(false); setRefreshing(false) })
   }
 
+  // Auto-refresh when viewing mailbox
+  useEffect(() => {
+    if (!mailAccount) return
+    const timer = setInterval(() => loadOutlookMail(mailAccount, true), 30000)
+    return () => clearInterval(timer)
+  }, [mailAccount])
+
   const openMail = async (msg) => {
     setSelectedMail(msg.id)
     setMailDetail(null)
@@ -739,7 +853,26 @@ function OutlookManager() {
     setMailDetail(data)
   }
 
-  const filtered = accounts.filter(a => !search || a.email.toLowerCase().includes(search.toLowerCase()))
+  const filtered = accounts.filter(a => {
+    if (search && !a.email.toLowerCase().includes(search.toLowerCase())) return false
+    if (filterTag && !(a.tags || {})[filterTag]) return false
+    return true
+  })
+
+  const toggleTag = async (emailAddr, tagKey, currentTags) => {
+    const current = currentTags[tagKey] || null
+    const idx = STATUS_CYCLE.indexOf(current)
+    const next = STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length]
+    const newTags = { ...currentTags }
+    if (next === null) delete newTags[tagKey]
+    else newTags[tagKey] = next
+    setAccounts(prev => prev.map(a => a.email === emailAddr ? { ...a, tags: newTags } : a))
+    await fetch(`${API}/admin/outlook/tags`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: emailAddr, tags: newTags })
+    })
+  }
 
   // If viewing a mailbox
   if (mailAccount) {
@@ -814,10 +947,14 @@ function OutlookManager() {
       <div className="accounts-list">
         <div className="accounts-toolbar">
           <div className="accounts-toolbar-top">
-            <h3>Outlook Accounts ({filtered.length})</h3>
+            <h3>Outlook Accounts ({filtered.length}{filtered.length !== accounts.length ? `/${accounts.length}` : ''})</h3>
           </div>
           <div className="accounts-toolbar-bottom">
             <input className="search-input" placeholder="Search accounts..." value={search} onChange={e => setSearch(e.target.value)} />
+            <select className="filter-tag-select" value={filterTag} onChange={e => setFilterTag(e.target.value)}>
+              <option value="">All tags</option>
+              {TAGS.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+            </select>
           </div>
         </div>
         {filtered.map(a => (
@@ -850,6 +987,23 @@ function OutlookManager() {
                 <span className="outlook-recovery-email">{a.recovery_email}</span>
               </div>
             )}
+            <div className="account-card-tags">
+              {TAGS.map(t => {
+                const status = (a.tags || {})[t.key] || null
+                return (
+                  <button
+                    key={t.key}
+                    className={`tag-chip ${status ? 'tag-' + status : 'tag-off'}`}
+                    title={`${t.label}${status ? ' \u2014 ' + status : ''}`}
+                    onClick={() => toggleTag(a.email, t.key, a.tags || {})}
+                  >
+                    <TagIcon name={t.key} />
+                    <span className="tag-label">{t.label}</span>
+                    {status && <span className={`tag-dot tag-dot-${status}`}>{STATUS_DOT[status]}</span>}
+                  </button>
+                )
+              })}
+            </div>
           </div>
         ))}
         {filtered.length === 0 && <div className="empty">No Outlook accounts yet. Upload some!</div>}

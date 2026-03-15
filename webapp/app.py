@@ -6,6 +6,7 @@ import email.header
 import email.utils
 import sqlite3
 import secrets
+import ssl
 import random
 import subprocess
 import threading
@@ -28,8 +29,37 @@ ADMIN_CONTAINER = os.environ.get('ADMIN_CONTAINER', 'wiki-admin-1')
 DB_PATH = os.environ.get('DB_PATH', '/data/panel.db')
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'himarra228')
 
+# Secondary (backup) IMAP server — RU
+SECONDARY_IMAP_HOST = os.environ.get('SECONDARY_IMAP_HOST', '')
+SECONDARY_IMAP_PORT = int(os.environ.get('SECONDARY_IMAP_PORT', '993'))
+
 # Worker pool for background jobs (limited to avoid overloading server)
 worker_pool = ThreadPoolExecutor(max_workers=3)
+
+# IMAP fetch pool — parallel server queries
+imap_pool = ThreadPoolExecutor(max_workers=4)
+
+# Simple TTL cache for mail listings (avoids redundant IMAP fetches)
+_mail_cache = {}  # key -> (timestamp, data)
+_mail_cache_lock = threading.Lock()
+MAIL_CACHE_TTL = 15  # seconds
+
+def _cache_get(key):
+    with _mail_cache_lock:
+        entry = _mail_cache.get(key)
+        if entry and (time.time() - entry[0]) < MAIL_CACHE_TTL:
+            return entry[1]
+    return None
+
+def _cache_set(key, data):
+    with _mail_cache_lock:
+        _mail_cache[key] = (time.time(), data)
+        # Evict old entries
+        if len(_mail_cache) > 200:
+            cutoff = time.time() - MAIL_CACHE_TTL * 2
+            to_del = [k for k, (t, _) in _mail_cache.items() if t < cutoff]
+            for k in to_del:
+                del _mail_cache[k]
 
 # Background jobs tracking
 jobs = {}  # job_id -> {status, total, done, created, errors}
@@ -150,8 +180,14 @@ def init_db():
         recovery_password TEXT DEFAULT '',
         refresh_token TEXT NOT NULL,
         client_id TEXT NOT NULL,
+        tags TEXT NOT NULL DEFAULT '{}',
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )''')
+    # Add tags column to outlook_accounts if missing (migration)
+    try:
+        db.execute('ALTER TABLE outlook_accounts ADD COLUMN tags TEXT NOT NULL DEFAULT \'{}\'') 
+    except Exception:
+        pass
     db.commit()
     db.close()
 
@@ -176,22 +212,43 @@ def admin_required(f):
     return decorated
 
 
+def _connect_imap(host, port):
+    """Connect to an IMAP server. For external servers, skip cert verification."""
+    if host in ('imap', 'localhost', '127.0.0.1'):
+        # Local Docker — plain IMAP (port 143)
+        return imaplib.IMAP4(host, 143)
+    else:
+        # External server — use plain IMAP for non-standard ports (socat proxy),
+        # SSL with no cert check for standard ports
+        if port not in (993, 143):
+            return imaplib.IMAP4(host, port)
+        elif port == 143:
+            return imaplib.IMAP4(host, port)
+        else:
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            return imaplib.IMAP4_SSL(host, port, ssl_context=ctx)
+
+
+def _get_imap_servers():
+    """Return list of (server_tag, host, port) for all configured IMAP servers."""
+    servers = [('eu', IMAP_HOST, IMAP_PORT)]
+    if SECONDARY_IMAP_HOST:
+        servers.append(('ru', SECONDARY_IMAP_HOST, SECONDARY_IMAP_PORT))
+    return servers
+
+
 def verify_imap_login(email_addr, password):
-    try:
-        imap = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT)
-        imap.login(email_addr, password)
-        imap.logout()
-        return True
-    except imaplib.IMAP4.error:
-        return False
-    except Exception:
+    for tag, host, port in _get_imap_servers():
         try:
-            imap = imaplib.IMAP4(IMAP_HOST, 143)
+            imap = _connect_imap(host, port)
             imap.login(email_addr, password)
             imap.logout()
             return True
         except Exception:
-            return False
+            continue
+    return False
 
 
 # --- API Routes ---
@@ -211,7 +268,24 @@ def api_login():
     if '@' not in email_addr:
         email_addr = f'{email_addr}@{DOMAIN}'
 
-    if not verify_imap_login(email_addr, password):
+    # Check if this is an Outlook account stored in DB
+    is_outlook = False
+    db = get_db()
+    outlook_row = db.execute(
+        'SELECT email, password, refresh_token, client_id FROM outlook_accounts WHERE email = ?',
+        (email_addr,)
+    ).fetchone()
+    db.close()
+
+    if outlook_row and outlook_row['password'] == password:
+        # Outlook account — verify by getting an access token
+        try:
+            _outlook_get_access_token(outlook_row['refresh_token'], outlook_row['client_id'], email_addr)
+            is_outlook = True
+        except Exception:
+            # Token failed but password matched DB — still allow login
+            is_outlook = True
+    elif not verify_imap_login(email_addr, password):
         return jsonify({'error': 'Wrong email or password'}), 401
 
     is_admin = email_addr == f'admin@{DOMAIN}'
@@ -219,11 +293,13 @@ def api_login():
     session['user'] = email_addr
     session['password'] = password
     session['is_admin'] = is_admin
+    session['is_outlook'] = is_outlook
 
     return jsonify({
         'ok': True,
         'email': email_addr,
-        'is_admin': is_admin
+        'is_admin': is_admin,
+        'is_outlook': is_outlook
     })
 
 
@@ -238,7 +314,8 @@ def api_logout():
 def api_me():
     return jsonify({
         'email': session['user'],
-        'is_admin': session.get('is_admin', False)
+        'is_admin': session.get('is_admin', False),
+        'is_outlook': session.get('is_outlook', False)
     })
 
 
@@ -347,15 +424,12 @@ def api_mail():
     return _fetch_mail(session['user'], session['password'])
 
 
-def _fetch_mail(user_email, user_password):
+def _fetch_from_one_server(server_tag, host, port, user_email, user_password):
+    """Fetch mail from a single IMAP server. Returns list of messages."""
+    messages = []
     try:
-        try:
-            imap = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT)
-        except Exception:
-            imap = imaplib.IMAP4(IMAP_HOST, 143)
+        imap = _connect_imap(host, port)
         imap.login(user_email, user_password)
-
-        messages = []
 
         for folder in ['INBOX', 'Junk']:
             try:
@@ -365,7 +439,7 @@ def _fetch_mail(user_email, user_password):
                 _, data = imap.search(None, 'ALL')
                 ids = data[0].split()
                 for mid in reversed(ids[-100:]):
-                    _, msg_data = imap.fetch(mid, '(RFC822 FLAGS)')
+                    _, msg_data = imap.fetch(mid, '(BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE MESSAGE-ID)] FLAGS)')
                     raw = msg_data[0][1]
                     msg = email.message_from_bytes(raw)
 
@@ -382,7 +456,7 @@ def _fetch_mail(user_email, user_password):
                         date_ts = 0
 
                     messages.append({
-                        'id': f'{folder}:{mid.decode()}',
+                        'id': f'{server_tag}:{folder}:{mid.decode()}',
                         'folder': folder,
                         'from': decode_header_value(msg.get('From', '')),
                         'to': decode_header_value(msg.get('To', '')),
@@ -390,17 +464,50 @@ def _fetch_mail(user_email, user_password):
                         'date': date_fmt,
                         'timestamp': date_ts,
                         'seen': is_seen,
-                        'spam': folder == 'Junk'
+                        'spam': folder == 'Junk',
+                        'server': server_tag,
+                        'message_id': msg.get('Message-ID', '')
                     })
             except Exception:
                 continue
 
         imap.logout()
+    except Exception:
+        pass
+    return messages
 
-        messages.sort(key=lambda m: m['timestamp'], reverse=True)
-        return jsonify({'messages': messages})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+
+def _fetch_mail(user_email, user_password):
+    # Check cache first
+    cache_key = f'mail:{user_email}'
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return jsonify({'messages': cached})
+
+    servers = _get_imap_servers()
+
+    # Fetch from all servers in PARALLEL
+    futures = []
+    for server_tag, host, port in servers:
+        futures.append(imap_pool.submit(_fetch_from_one_server, server_tag, host, port, user_email, user_password))
+
+    all_messages = []
+    seen_message_ids = set()
+    for future in as_completed(futures):
+        for msg in future.result():
+            msg_id = msg.pop('message_id', '')
+            if msg_id and msg_id in seen_message_ids:
+                continue
+            if msg_id:
+                seen_message_ids.add(msg_id)
+            all_messages.append(msg)
+
+    if not all_messages and not SECONDARY_IMAP_HOST:
+        return jsonify({'error': 'Cannot connect to mail server'}), 500
+
+    all_messages.sort(key=lambda m: m['timestamp'], reverse=True)
+    _cache_set(cache_key, all_messages)
+    return jsonify({'messages': all_messages})
 
 
 @app.route('/api/mail/<path:mail_id>')
@@ -409,16 +516,28 @@ def api_mail_detail(mail_id):
     return _fetch_mail_detail(mail_id, session['user'], session['password'])
 
 
+def _parse_mail_id(mail_id):
+    """Parse mail_id: supports 'server:folder:mid' and legacy 'folder:mid'."""
+    parts = mail_id.split(':')
+    if len(parts) >= 3 and parts[0] in ('eu', 'ru'):
+        return parts[0], parts[1], parts[2]
+    # Legacy format: folder:mid (assume eu)
+    return 'eu', parts[0], parts[1] if len(parts) > 1 else ''
+
+
+def _get_imap_for_server(server_tag):
+    """Get (host, port) for a given server tag."""
+    if server_tag == 'ru' and SECONDARY_IMAP_HOST:
+        return SECONDARY_IMAP_HOST, SECONDARY_IMAP_PORT
+    return IMAP_HOST, IMAP_PORT
+
+
 def _fetch_mail_detail(mail_id, user_email, user_password):
     try:
-        parts = mail_id.split(':')
-        folder = parts[0]
-        mid = parts[1]
+        server_tag, folder, mid = _parse_mail_id(mail_id)
+        host, port = _get_imap_for_server(server_tag)
 
-        try:
-            imap = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT)
-        except Exception:
-            imap = imaplib.IMAP4(IMAP_HOST, 143)
+        imap = _connect_imap(host, port)
         imap.login(user_email, user_password)
         imap.select(folder)
         _, msg_data = imap.fetch(mid.encode(), '(RFC822)')
@@ -443,14 +562,10 @@ def _fetch_mail_detail(mail_id, user_email, user_password):
 
 def _delete_mail(mail_id, user_email, user_password):
     try:
-        parts = mail_id.split(':')
-        folder = parts[0]
-        mid = parts[1]
+        server_tag, folder, mid = _parse_mail_id(mail_id)
+        host, port = _get_imap_for_server(server_tag)
 
-        try:
-            imap = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT)
-        except Exception:
-            imap = imaplib.IMAP4(IMAP_HOST, 143)
+        imap = _connect_imap(host, port)
         imap.login(user_email, user_password)
         imap.select(folder)
         imap.store(mid.encode(), '+FLAGS', '\\Deleted')
@@ -472,6 +587,10 @@ def api_domains():
 
 def mailu_command(cmd):
     try:
+        # Insert '--' before the last argument (password) for 'user' and 'password'
+        # commands so passwords starting with '-' aren't treated as flags
+        if cmd and cmd[0] in ('user', 'password') and len(cmd) >= 3:
+            cmd = cmd[:-1] + ['--', cmd[-1]]
         result = subprocess.run(
             ['docker', 'exec', ADMIN_CONTAINER, 'flask', 'mailu'] + cmd,
             capture_output=True, text=True, timeout=30
@@ -722,15 +841,38 @@ def api_admin_delete():
 # --- Outlook Accounts ---
 
 @app.route('/api/admin/outlook/accounts')
-@admin_required
+@login_required
 def api_admin_outlook_accounts():
     db = get_db()
     rows = db.execute(
-        'SELECT id, email, password, recovery_email, recovery_password, refresh_token, client_id, created_at '
+        'SELECT id, email, password, recovery_email, recovery_password, refresh_token, client_id, tags, created_at '
         'FROM outlook_accounts ORDER BY id DESC'
     ).fetchall()
     db.close()
-    return jsonify({'accounts': [dict(r) for r in rows]})
+    result = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d['tags'] = json.loads(d.get('tags') or '{}')
+        except Exception:
+            d['tags'] = {}
+        result.append(d)
+    return jsonify({'accounts': result})
+
+
+@app.route('/api/admin/outlook/tags', methods=['POST'])
+@login_required
+def api_admin_outlook_tags():
+    data = request.get_json()
+    email_addr = (data.get('email') or '').strip()
+    tags = data.get('tags', {})
+    if not email_addr:
+        return jsonify({'error': 'Email required'}), 400
+    db = get_db()
+    db.execute('UPDATE outlook_accounts SET tags = ? WHERE email = ?', (json.dumps(tags), email_addr))
+    db.commit()
+    db.close()
+    return jsonify({'ok': True})
 
 
 @app.route('/api/admin/outlook/upload', methods=['POST'])
@@ -808,7 +950,7 @@ def api_admin_outlook_upload():
 
 
 @app.route('/api/admin/outlook/delete', methods=['POST'])
-@admin_required
+@login_required
 def api_admin_outlook_delete():
     data = request.get_json()
     email_addr = (data.get('email') or '').strip()
@@ -829,8 +971,18 @@ def api_admin_outlook_delete():
     return jsonify({'ok': True, 'deleted': len(to_delete)})
 
 
-def _outlook_get_access_token(refresh_token, client_id):
-    """Get OAuth2 access token from Microsoft using refresh token."""
+# OAuth2 token cache: {email: {token, expires_at}}
+_token_cache = {}
+_token_cache_lock = threading.Lock()
+
+def _outlook_get_access_token(refresh_token, client_id, email_addr=''):
+    """Get OAuth2 access token from Microsoft using refresh token. Cached for ~50 min."""
+    cache_key = email_addr or refresh_token[:20]
+    with _token_cache_lock:
+        cached = _token_cache.get(cache_key)
+        if cached and cached['expires_at'] > time.time():
+            return cached['token']
+
     r = http_requests.post(
         'https://login.microsoftonline.com/common/oauth2/v2.0/token',
         data={
@@ -846,6 +998,22 @@ def _outlook_get_access_token(refresh_token, client_id):
     if not access_token:
         error = data.get('error_description', data.get('error', 'Unknown error'))
         raise Exception(f'Cannot get access_token: {error}')
+
+    # Cache token for 50 minutes (they last ~60 min)
+    with _token_cache_lock:
+        _token_cache[cache_key] = {'token': access_token, 'expires_at': time.time() + 3000}
+
+    # Update refresh_token if Microsoft returned a new one
+    new_refresh = data.get('refresh_token')
+    if new_refresh and new_refresh != refresh_token:
+        try:
+            db = get_db()
+            db.execute('UPDATE outlook_accounts SET refresh_token = ? WHERE email = ?', (new_refresh, email_addr))
+            db.commit()
+            db.close()
+        except Exception:
+            pass
+
     return access_token
 
 
@@ -858,7 +1026,7 @@ def _outlook_imap_connect(email_addr, access_token):
 
 
 @app.route('/api/admin/outlook/mail')
-@admin_required
+@login_required
 def api_admin_outlook_mail():
     account = request.args.get('account', '').strip()
     if not account:
@@ -875,7 +1043,7 @@ def api_admin_outlook_mail():
         return jsonify({'error': 'Account not found'}), 404
 
     try:
-        access_token = _outlook_get_access_token(row['refresh_token'], row['client_id'])
+        access_token = _outlook_get_access_token(row['refresh_token'], row['client_id'], account)
         imap = _outlook_imap_connect(account, access_token)
 
         messages = []
@@ -886,34 +1054,47 @@ def api_admin_outlook_mail():
                     continue
                 _, data = imap.search(None, 'ALL')
                 ids = data[0].split()
-                for mid in reversed(ids[-100:]):
-                    _, msg_data = imap.fetch(mid, '(RFC822 FLAGS)')
-                    raw = msg_data[0][1]
-                    msg = email.message_from_bytes(raw)
-
-                    flags_raw = msg_data[0][0].decode() if msg_data[0][0] else ''
-                    is_seen = '\\Seen' in flags_raw
-
-                    date_str = msg.get('Date', '')
-                    try:
-                        date_parsed = email.utils.parsedate_to_datetime(date_str)
-                        date_fmt = date_parsed.strftime('%d.%m.%Y %H:%M')
-                        date_ts = date_parsed.timestamp()
-                    except Exception:
-                        date_fmt = date_str[:20]
-                        date_ts = 0
-
-                    messages.append({
-                        'id': f'{folder}:{mid.decode()}',
-                        'folder': folder,
-                        'from': decode_header_value(msg.get('From', '')),
-                        'to': decode_header_value(msg.get('To', '')),
-                        'subject': decode_header_value(msg.get('Subject', '(no subject)')),
-                        'date': date_fmt,
-                        'timestamp': date_ts,
-                        'seen': is_seen,
-                        'spam': folder == 'Junk'
-                    })
+                # Only fetch last 30 messages (not 100) for speed
+                batch = list(reversed(ids[-30:]))
+                if not batch:
+                    continue
+                # Fetch only headers + flags (not full RFC822) for the list
+                id_set = b','.join(batch)
+                _, fetch_data = imap.fetch(id_set, '(FLAGS BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE)])')
+                # Parse response pairs
+                i = 0
+                while i < len(fetch_data):
+                    item = fetch_data[i]
+                    if isinstance(item, tuple) and len(item) == 2:
+                        meta_line = item[0].decode() if isinstance(item[0], bytes) else str(item[0])
+                        header_bytes = item[1] if isinstance(item[1], bytes) else b''
+                        # Extract message ID from response
+                        import re as _re
+                        mid_match = _re.search(r'^(\d+)', meta_line)
+                        mid_str = mid_match.group(1) if mid_match else '0'
+                        is_seen = '\\Seen' in meta_line
+                        # Parse header
+                        msg = email.message_from_bytes(header_bytes)
+                        date_str = msg.get('Date', '')
+                        try:
+                            date_parsed = email.utils.parsedate_to_datetime(date_str)
+                            date_fmt = date_parsed.strftime('%d.%m.%Y %H:%M')
+                            date_ts = date_parsed.timestamp()
+                        except Exception:
+                            date_fmt = date_str[:20] if date_str else ''
+                            date_ts = 0
+                        messages.append({
+                            'id': f'{folder}:{mid_str}',
+                            'folder': folder,
+                            'from': decode_header_value(msg.get('From', '')),
+                            'to': decode_header_value(msg.get('To', '')),
+                            'subject': decode_header_value(msg.get('Subject', '(no subject)')),
+                            'date': date_fmt,
+                            'timestamp': date_ts,
+                            'seen': is_seen,
+                            'spam': folder == 'Junk'
+                        })
+                    i += 1
             except Exception:
                 continue
 
@@ -925,7 +1106,7 @@ def api_admin_outlook_mail():
 
 
 @app.route('/api/admin/outlook/mail/<path:mail_id>')
-@admin_required
+@login_required
 def api_admin_outlook_mail_detail(mail_id):
     account = request.args.get('account', '').strip()
     if not account:
@@ -946,7 +1127,7 @@ def api_admin_outlook_mail_detail(mail_id):
         folder = parts[0]
         mid = parts[1]
 
-        access_token = _outlook_get_access_token(row['refresh_token'], row['client_id'])
+        access_token = _outlook_get_access_token(row['refresh_token'], row['client_id'], account)
         imap = _outlook_imap_connect(account, access_token)
         imap.select(folder)
         _, msg_data = imap.fetch(mid.encode(), '(RFC822)')
@@ -973,8 +1154,12 @@ def api_admin_outlook_mail_detail(mail_id):
 @app.route('/<path:path>')
 def serve_spa(path=''):
     if path and os.path.exists(os.path.join(app.static_folder, path)):
-        return send_from_directory(app.static_folder, path)
-    return send_from_directory(app.static_folder, 'index.html')
+        resp = send_from_directory(app.static_folder, path)
+    else:
+        resp = send_from_directory(app.static_folder, 'index.html')
+    if path == '' or path.endswith('.html'):
+        resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
 
 
 if __name__ == '__main__':
